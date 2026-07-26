@@ -1,0 +1,274 @@
+import { conmysql } from '../db.js'
+
+
+// Prueba del controlador
+export const pruebaBalanza = (req, res) => {
+    res.send('Controlador de balanza funcionando correctamente');
+}
+
+
+// Registrar peso enviado por ESP32
+export const registrarPeso = async (req, res) => {
+
+    try {
+
+        const { peso, id_usuario } = req.body;
+
+        if (peso == null) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Debe enviar el peso"
+            });
+        }
+
+
+        const usuario = id_usuario || 1;
+
+
+        const [result] = await conmysql.query(
+
+            `INSERT INTO capturas
+            (id_deteccion, id_usuario, peso, estado)
+            VALUES (NULL, ?, ?, 1)`,
+
+            [
+                usuario,
+                peso
+            ]
+
+        );
+
+
+        res.status(201).json({
+
+            estado: 1,
+            mensaje: "Peso registrado correctamente",
+            id_captura: result.insertId,
+            peso: peso
+
+        });
+
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+
+            estado: 0,
+            mensaje: "Error del servidor"
+
+        });
+
+    }
+
+};
+
+
+
+// Obtener todos los pesos registrados
+export const getPesos = async (req, res) => {
+
+    try {
+
+        const [result] = await conmysql.query(
+
+            `SELECT 
+                c.id_captura,
+                c.peso,
+                c.fecha_hora,
+                c.estado,
+                u.nombre,
+                u.apellido
+            FROM capturas c
+            INNER JOIN usuarios u
+            ON c.id_usuario = u.id_usuario
+            ORDER BY c.id_captura DESC`
+
+        );
+
+
+        res.json({
+
+            cantidad: result.length,
+            data: result
+
+        });
+
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+
+            estado: 0,
+            mensaje: "Error del servidor"
+
+        });
+
+    }
+
+};
+
+
+
+// Obtener peso por ID
+export const getPesoByID = async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+
+        const [result] = await conmysql.query(
+
+            `SELECT *
+             FROM capturas
+             WHERE id_captura=?`,
+
+            [id]
+
+        );
+
+
+        if (result.length <= 0) {
+
+            return res.status(404).json({
+
+                estado: 0,
+                mensaje: "Registro no encontrado"
+
+            });
+
+        }
+
+
+        res.json(result[0]);
+
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+
+            estado: 0,
+            mensaje: "Error del servidor"
+
+        });
+
+    }
+
+};
+
+
+
+// Obtener el último peso recibido
+export const ultimoPeso = async (req, res) => {
+
+    try {
+
+
+        const [result] = await conmysql.query(
+
+            `SELECT 
+                id_captura,
+                peso,
+                fecha_hora
+             FROM capturas
+             ORDER BY id_captura DESC
+             LIMIT 1`
+
+        );
+
+
+        if (result.length <= 0) {
+
+            return res.json({
+
+                estado: 0,
+                mensaje: "No existen registros"
+
+            });
+
+        }
+
+
+        res.json({
+
+            estado: 1,
+            data: result[0]
+
+        });
+
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+
+            estado: 0,
+            mensaje: "Error"
+
+        });
+
+    }
+
+};
+
+
+
+// Eliminar registro de peso
+export const deletePeso = async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+
+        const [result] = await conmysql.query(
+
+            `DELETE FROM capturas 
+             WHERE id_captura=?`,
+
+            [id]
+
+        );
+
+
+        if (result.affectedRows <= 0) {
+
+            return res.status(404).json({
+
+                estado: 0,
+                mensaje: "Peso no encontrado"
+
+            });
+
+        }
+
+
+        res.json({
+
+            estado: 1,
+            mensaje: "Registro eliminado correctamente"
+
+        });
+
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+
+            estado: 0,
+            mensaje: "Error del servidor"
+
+        });
+
+    }
+
+};
