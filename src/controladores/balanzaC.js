@@ -73,16 +73,17 @@ export const getPesos = async (req, res) => {
 
         const [result] = await conmysql.query(
 
-            `SELECT 
-                c.id_captura,
-                c.peso,
-                c.fecha_hora,
-                c.estado,
-                u.nombre,
-                u.apellido
+            `SELECT
+            c.id_captura,
+            c.peso,
+            c.fecha_hora,
+            c.estado,
+            u.nombre,
+            u.apellido
             FROM capturas c
             INNER JOIN usuarios u
             ON c.id_usuario = u.id_usuario
+            WHERE c.estado = 1
             ORDER BY c.id_captura DESC`
 
         );
@@ -124,8 +125,8 @@ export const getPesoByID = async (req, res) => {
         const [result] = await conmysql.query(
 
             `SELECT *
-             FROM capturas
-             WHERE id_captura=?`,
+             FROM capturas WHERE id_captura=?
+             AND estado = 1`,
 
             [id]
 
@@ -172,13 +173,10 @@ export const ultimoPeso = async (req, res) => {
 
         const [result] = await conmysql.query(
 
-            `SELECT 
-                id_captura,
-                peso,
-                fecha_hora
-             FROM capturas
-             ORDER BY id_captura DESC
-             LIMIT 1`
+            `SELECT id_captura, peso, fecha_hora FROM capturas
+            WHERE estado = 1
+            ORDER BY id_captura DESC
+            LIMIT 1`
 
         );
 
@@ -220,43 +218,40 @@ export const ultimoPeso = async (req, res) => {
 
 
 
-// Eliminar registro de peso
-export const deletePeso = async (req, res) => {
+// desactivar registro de peso
+export const desactivarPeso = async (req, res) => {
 
     try {
 
         const { id } = req.params;
 
-
         const [result] = await conmysql.query(
 
-            `DELETE FROM capturas 
-             WHERE id_captura=?`,
+            `UPDATE capturas
+             SET estado = 0
+             WHERE id_captura = ?`,
 
             [id]
 
         );
-
 
         if (result.affectedRows <= 0) {
 
             return res.status(404).json({
 
                 estado: 0,
-                mensaje: "Peso no encontrado"
+                mensaje: "Registro no encontrado"
 
             });
 
         }
 
-
         res.json({
 
             estado: 1,
-            mensaje: "Registro eliminado correctamente"
+            mensaje: "Registro desactivado correctamente"
 
         });
-
 
     } catch (error) {
 
@@ -271,4 +266,54 @@ export const deletePeso = async (req, res) => {
 
     }
 
-};
+}
+
+// activar registro de peso
+export const activarPeso = async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+        const [result] = await conmysql.query(
+
+            `UPDATE capturas
+             SET estado = 1
+             WHERE id_captura = ?`,
+
+            [id]
+
+        );
+
+        if (result.affectedRows <= 0) {
+
+            return res.status(404).json({
+
+                estado: 0,
+                mensaje: "Registro no encontrado"
+
+            });
+
+        }
+
+        res.json({
+
+            estado: 1,
+            mensaje: "Registro activado correctamente"
+
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+
+            estado: 0,
+            mensaje: "Error del servidor"
+
+        });
+
+    }
+
+}
