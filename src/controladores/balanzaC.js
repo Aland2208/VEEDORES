@@ -74,7 +74,82 @@ export const registrarPeso = async (req, res) => {
     }
 };
 
+// =======================
+// PESO EN TIEMPO REAL 
+// =======================
 
+export const pesoLive = (req, res) => {
+
+    try {
+
+        const { peso } = req.body;
+
+
+        if (peso == null) {
+
+            return res.status(400).json({
+
+                estado: 0,
+                mensaje: "Debe enviar el peso"
+
+            });
+
+        }
+
+
+
+        const io = getIO();
+
+
+        if (io) {
+
+
+            io.emit(
+                "pesoActual",
+                {
+
+                    peso: Number(peso),
+
+                    fecha_hora: new Date()
+
+                }
+            );
+
+
+        }
+
+
+
+        res.json({
+
+            estado: 1,
+
+            mensaje: "Peso enviado en tiempo real",
+
+            peso: Number(peso)
+
+        });
+
+
+
+    } catch(error) {
+
+
+        console.log(error);
+
+
+        res.status(500).json({
+
+            estado:0,
+
+            mensaje:"Error servidor"
+
+        });
+
+
+    }
+
+};
 
 // Obtener todos los pesos registrados
 export const getPesos = async (req, res) => {
