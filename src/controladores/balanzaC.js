@@ -46,7 +46,7 @@ export const registrarPeso = async (req, res) => {
 
                 id_captura: result.insertId,
                 peso: Number(peso),
-                fecha_hora: new Date()
+                fecha_hora: new Date().toLocaleString("es-ES", { timeZone: "America/Guayaquil" })
 
             });
 
@@ -110,7 +110,7 @@ export const pesoLive = (req, res) => {
 
                     peso: Number(peso),
 
-                    fecha_hora: new Date()
+                    fecha_hora: new Date().toLocaleString("es-ES", { timeZone: "America/Guayaquil" })
 
                 }
             );
@@ -132,7 +132,7 @@ export const pesoLive = (req, res) => {
 
 
 
-    } catch(error) {
+    } catch (error) {
 
 
         console.log(error);
@@ -140,9 +140,9 @@ export const pesoLive = (req, res) => {
 
         res.status(500).json({
 
-            estado:0,
+            estado: 0,
 
-            mensaje:"Error servidor"
+            mensaje: "Error servidor"
 
         });
 
