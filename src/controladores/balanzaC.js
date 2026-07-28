@@ -1,5 +1,5 @@
 import { conmysql } from '../db.js'
-
+import { getIO } from '../websocket/socket.js'
 
 // Prueba del controlador
 export const pruebaBalanza = (req, res) => {
@@ -9,21 +9,19 @@ export const pruebaBalanza = (req, res) => {
 
 // Registrar peso enviado por ESP32
 export const registrarPeso = async (req, res) => {
-
     try {
 
         const { peso, id_usuario } = req.body;
-
         if (peso == null) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: "Debe enviar el peso"
+
             });
+
         }
 
-
         const usuario = id_usuario || 1;
-
 
         const [result] = await conmysql.query(
 
@@ -38,7 +36,21 @@ export const registrarPeso = async (req, res) => {
 
         );
 
+        // ==========================
+        // ENVIAR PESO POR WEBSOCKET
+        // ==========================
+        const io = getIO();
+        if (io) {
 
+            io.emit("nuevoPeso", {
+
+                id_captura: result.insertId,
+                peso: Number(peso),
+                fecha_hora: new Date()
+
+            });
+
+        }
         res.status(201).json({
 
             estado: 1,
@@ -47,7 +59,6 @@ export const registrarPeso = async (req, res) => {
             peso: peso
 
         });
-
 
     } catch (error) {
 
@@ -61,7 +72,6 @@ export const registrarPeso = async (req, res) => {
         });
 
     }
-
 };
 
 
