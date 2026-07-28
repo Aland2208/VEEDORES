@@ -421,19 +421,42 @@ export const activarPeso = async (req, res) => {
 
 export const taraRealizada = (req, res) => {
 
-    const io = getIO();
+    try {
 
-    if (io) {
+        const io = getIO();
 
-        io.emit("taraRealizada", {
-            mensaje: "Tara realizada correctamente"
+        if (io) {
+
+            io.emit("taraRealizada", {
+
+                mensaje: "Balanza puesta en cero correctamente",
+                fecha_hora: new Date().toLocaleString("es-EC", {
+                    timeZone: "America/Guayaquil",
+                    hour12: false
+                })
+
+            });
+
+        }
+
+        res.json({
+
+            estado: 1,
+            mensaje: "Tara enviada"
+
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+
+            estado: 0,
+            mensaje: "Error del servidor"
+
         });
 
     }
 
-    res.json({
-        estado: 1,
-        mensaje: "Tara enviada"
-    });
-
-}
+};
