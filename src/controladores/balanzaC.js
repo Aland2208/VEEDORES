@@ -418,3 +418,22 @@ export const activarPeso = async (req, res) => {
     }
 
 };
+
+export const taraRealizada = (req, res) => {
+
+    const io = getIO();
+
+    if (io) {
+
+        io.emit("taraRealizada", {
+            mensaje: "Tara realizada correctamente"
+        });
+
+    }
+
+    res.json({
+        estado: 1,
+        mensaje: "Tara enviada"
+    });
+
+}
