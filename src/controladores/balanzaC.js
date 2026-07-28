@@ -6,36 +6,37 @@ export const pruebaBalanza = (req, res) => {
     res.send('Controlador de balanza funcionando correctamente');
 }
 
-
-const [zona] = await conmysql.query(`
-    SELECT
-        NOW() AS ahora,
-        @@session.time_zone AS sesion,
-        @@global.time_zone AS global
-`);
-
-console.log(zona[0]);
 // Registrar peso enviado por ESP32
 export const registrarPeso = async (req, res) => {
+
     try {
 
         const { peso, id_usuario } = req.body;
+
         if (peso == null) {
+
             return res.status(400).json({
                 estado: 0,
                 mensaje: "Debe enviar el peso"
-
             });
 
         }
 
         const usuario = id_usuario || 1;
 
+        // Guardar usando hora Ecuador
         const [result] = await conmysql.query(
 
             `INSERT INTO capturas
-            (id_deteccion, id_usuario, peso, estado)
-            VALUES (NULL, ?, ?, 1)`,
+            (id_deteccion, id_usuario, peso, fecha_hora, estado)
+            VALUES
+            (
+                NULL,
+                ?,
+                ?,
+                CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '-05:00'),
+                1
+            )`,
 
             [
                 usuario,
@@ -44,27 +45,43 @@ export const registrarPeso = async (req, res) => {
 
         );
 
-        // ==========================
-        // ENVIAR PESO POR WEBSOCKET
-        // ==========================
+        // Obtener la fecha exacta guardada
+        const [registro] = await conmysql.query(
+
+            `SELECT
+                DATE_FORMAT(
+                    fecha_hora,
+                    '%Y-%m-%d %H:%i:%s'
+                ) AS fecha_hora
+             FROM capturas
+             WHERE id_captura = ?`,
+
+            [result.insertId]
+
+        );
+
+        // Enviar por websocket
         const io = getIO();
+
         if (io) {
 
             io.emit("nuevoPeso", {
 
                 id_captura: result.insertId,
                 peso: Number(peso),
-                fecha_hora: new Date().toLocaleString("es-ES", { timeZone: "America/Guayaquil" })
+                fecha_hora: registro[0].fecha_hora
 
             });
 
         }
+
         res.status(201).json({
 
             estado: 1,
             mensaje: "Peso registrado correctamente",
             id_captura: result.insertId,
-            peso: peso
+            peso: Number(peso),
+            fecha_hora: registro[0].fecha_hora
 
         });
 
@@ -80,10 +97,11 @@ export const registrarPeso = async (req, res) => {
         });
 
     }
+
 };
 
 // =======================
-// PESO EN TIEMPO REAL 
+// PESO EN TIEMPO REAL
 // =======================
 
 export const pesoLive = (req, res) => {
@@ -91,7 +109,6 @@ export const pesoLive = (req, res) => {
     try {
 
         const { peso } = req.body;
-
 
         if (peso == null) {
 
@@ -104,56 +121,43 @@ export const pesoLive = (req, res) => {
 
         }
 
-
-
         const io = getIO();
-
 
         if (io) {
 
+            io.emit("pesoActual", {
 
-            io.emit(
-                "pesoActual",
-                {
+                peso: Number(peso),
 
-                    peso: Number(peso),
+                fecha_hora: new Date().toLocaleString("es-EC", {
 
-                    fecha_hora: new Date().toLocaleString("es-ES", { timeZone: "America/Guayaquil" })
+                    timeZone: "America/Guayaquil",
+                    hour12: false
 
-                }
-            );
+                })
 
+            });
 
         }
-
-
 
         res.json({
 
             estado: 1,
-
             mensaje: "Peso enviado en tiempo real",
-
             peso: Number(peso)
 
         });
 
-
-
     } catch (error) {
 
-
         console.log(error);
-
 
         res.status(500).json({
 
             estado: 0,
-
             mensaje: "Error servidor"
 
         });
-
 
     }
 
@@ -167,20 +171,22 @@ export const getPesos = async (req, res) => {
         const [result] = await conmysql.query(
 
             `SELECT
-            c.id_captura,
-            c.peso,
-            c.fecha_hora,
-            c.estado,
-            u.nombre,
-            u.apellido
+                c.id_captura,
+                c.peso,
+                DATE_FORMAT(
+                    c.fecha_hora,
+                    '%Y-%m-%d %H:%i:%s'
+                ) AS fecha_hora,
+                c.estado,
+                u.nombre,
+                u.apellido
             FROM capturas c
             INNER JOIN usuarios u
-            ON c.id_usuario = u.id_usuario
+                ON c.id_usuario = u.id_usuario
             WHERE c.estado = 1
             ORDER BY c.id_captura DESC`
 
         );
-
 
         res.json({
 
@@ -188,7 +194,6 @@ export const getPesos = async (req, res) => {
             data: result
 
         });
-
 
     } catch (error) {
 
@@ -205,8 +210,6 @@ export const getPesos = async (req, res) => {
 
 };
 
-
-
 // Obtener peso por ID
 export const getPesoByID = async (req, res) => {
 
@@ -214,17 +217,25 @@ export const getPesoByID = async (req, res) => {
 
         const { id } = req.params;
 
-
         const [result] = await conmysql.query(
 
-            `SELECT *
-             FROM capturas WHERE id_captura=?
-             AND estado = 1`,
+            `SELECT
+                id_captura,
+                id_deteccion,
+                id_usuario,
+                peso,
+                DATE_FORMAT(
+                    fecha_hora,
+                    '%Y-%m-%d %H:%i:%s'
+                ) AS fecha_hora,
+                estado
+            FROM capturas
+            WHERE id_captura = ?
+            AND estado = 1`,
 
             [id]
 
         );
-
 
         if (result.length <= 0) {
 
@@ -237,9 +248,7 @@ export const getPesoByID = async (req, res) => {
 
         }
 
-
         res.json(result[0]);
-
 
     } catch (error) {
 
@@ -256,23 +265,26 @@ export const getPesoByID = async (req, res) => {
 
 };
 
-
-
 // Obtener el último peso recibido
 export const ultimoPeso = async (req, res) => {
 
     try {
 
-
         const [result] = await conmysql.query(
 
-            `SELECT id_captura, peso, fecha_hora FROM capturas
+            `SELECT
+                id_captura,
+                peso,
+                DATE_FORMAT(
+                    fecha_hora,
+                    '%Y-%m-%d %H:%i:%s'
+                ) AS fecha_hora
+            FROM capturas
             WHERE estado = 1
             ORDER BY id_captura DESC
             LIMIT 1`
 
         );
-
 
         if (result.length <= 0) {
 
@@ -285,14 +297,12 @@ export const ultimoPeso = async (req, res) => {
 
         }
 
-
         res.json({
 
             estado: 1,
             data: result[0]
 
         });
-
 
     } catch (error) {
 
@@ -309,9 +319,7 @@ export const ultimoPeso = async (req, res) => {
 
 };
 
-
-
-// desactivar registro de peso
+// Desactivar registro
 export const desactivarPeso = async (req, res) => {
 
     try {
@@ -359,9 +367,9 @@ export const desactivarPeso = async (req, res) => {
 
     }
 
-}
+};
 
-// activar registro de peso
+// Activar registro
 export const activarPeso = async (req, res) => {
 
     try {
@@ -409,4 +417,4 @@ export const activarPeso = async (req, res) => {
 
     }
 
-}
+};
