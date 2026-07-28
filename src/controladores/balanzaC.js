@@ -7,6 +7,14 @@ export const pruebaBalanza = (req, res) => {
 }
 
 
+const [zona] = await conmysql.query(`
+    SELECT
+        NOW() AS ahora,
+        @@session.time_zone AS sesion,
+        @@global.time_zone AS global
+`);
+
+console.log(zona[0]);
 // Registrar peso enviado por ESP32
 export const registrarPeso = async (req, res) => {
     try {
