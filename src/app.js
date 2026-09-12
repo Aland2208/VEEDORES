@@ -5,6 +5,7 @@ import cors from 'cors';
 import balanzaRouters from './routes/balanza.routes.js'
 import deteccionRouters from './routes/deteccion.routes.js'
 import capturaRouters from './routes/captura.routes.js'
+import authRouters from './routes/auth.routes.js'
 const app = express();
 
 app.use(express.json()); //la app trabajara con json
@@ -21,6 +22,7 @@ app.use(cors(corsOptions))
 app.use('/api/balanza', balanzaRouters)
 app.use('/api/deteccion', deteccionRouters)
 app.use('/api/captura', capturaRouters)
+app.use('/api/auth', authRouters)
 
 app.use((req, resp, next) => {
     resp.status(400).json({
