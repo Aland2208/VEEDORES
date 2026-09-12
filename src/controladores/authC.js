@@ -2,7 +2,10 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { conmysql } from "../db.js";
-import * as Brevo from '@getbrevo/brevo';
+
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const Brevo = require('@getbrevo/brevo');
 
 // ==========================================
 // REGISTRAR USUARIO
