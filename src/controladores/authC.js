@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { conmysql } from "../db.js";
-import Brevo from '@getbrevo/brevo'; // <-- LA LIBRERÍA DE TU AMIGO
+import * as Brevo from '@getbrevo/brevo';
 
 // ==========================================
 // REGISTRAR USUARIO
