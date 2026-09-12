@@ -9,7 +9,7 @@ import { conmysql } from "../db.js";
 // ==========================================
 const transporter = nodemailer.createTransport({
     host: "smtp-relay.brevo.com",
-    port: 587,
+    port: 2525,
     auth: {
         user: process.env.BREVO_USER,
         pass: process.env.BREVO_PASS,
