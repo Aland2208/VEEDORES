@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { conmysql } from "../db.js";
+import Brevo from '@getbrevo/brevo'; // <-- LA LIBRERÍA DE TU AMIGO
 
 // ==========================================
 // REGISTRAR USUARIO
@@ -83,12 +84,13 @@ export const loginUsuario = async (req, res) => {
 };
 
 // ==========================================
-// SOLICITAR RECUPERACIÓN (VÍA API BREVO)
+// SOLICITAR RECUPERACIÓN (MÉTODO DE TU AMIGO)
 // ==========================================
 export const solicitarRecuperacion = async (req, res) => {
     try {
         const { correo } = req.body;
         
+        // 1. Generar token y guardarlo en MySQL
         const tokenRecuperacion = crypto.randomBytes(20).toString("hex");
         const fechaExpira = new Date(Date.now() + 3600000); 
 
@@ -103,43 +105,38 @@ export const solicitarRecuperacion = async (req, res) => {
 
         const urlRecuperacion = `${process.env.FRONTEND_URL}/restablecer-password?token=${tokenRecuperacion}`;
 
-        // Llamada directa a la API oficial de Brevo
-        const respuestaBrevo = await fetch("https://api.brevo.com/v3/smtp/email", {
-            method: "POST",
-            headers: {
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "api-key": process.env.API_BREVO
-            },
-            body: JSON.stringify({
-                sender: { email: "veedoresbu@gmail.com", name: "Sistema Observador de Pesca" },
-                to: [{ email: correo }],
-                subject: "Recuperación de Contraseña",
-                htmlContent: `
-                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-                        <h2 style="color: #3880ff; text-align: center;">Recuperación de Contraseña</h2>
-                        <p>Has solicitado restablecer tu contraseña en el Sistema de Observador de Pesca.</p>
-                        <p>Haz clic en el siguiente botón para crear una nueva contraseña. Este enlace expira en 1 hora.</p>
-                        <div style="text-align: center; margin: 30px 0;">
-                            <a href="${urlRecuperacion}" style="background-color: #3880ff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">Restablecer Contraseña</a>
-                        </div>
-                        <p style="font-size: 12px; color: #666; text-align: center;">Si tú no solicitaste esto, ignora este correo.</p>
+        // 2. Configurar la API de Brevo (Igual que tu amigo)
+        const apiInstance = new Brevo.TransactionalEmailsApi();
+        
+        // Render leerá API_BREVO de su panel web
+        apiInstance.setApiKey(Brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.API_BREVO);
+
+        const sendSmtpEmail = {
+            sender: { name: 'Sistema Observador de Pesca', email: 'veedoresbu@gmail.com' },
+            to: [{ email: correo }],
+            subject: 'Recuperación de contraseña',
+            htmlContent: `
+                <div style="font-family: Arial, sans-serif; padding: 20px; border: 2px solid #3880ff; border-radius: 8px; max-width: 500px; margin: auto;">
+                    <h2 style="color: #3880ff; text-align: center;">Recuperación de Contraseña</h2>
+                    <p style="color: #333;">Has solicitado restablecer tu contraseña. Haz clic en el botón de abajo para continuar:</p>
+                    <div style="text-align: center; margin: 25px 0;">
+                        <a href="${urlRecuperacion}" style="background-color: #3880ff; color: white; padding: 12px 20px; text-decoration: none; font-weight: bold; border-radius: 5px;">Restablecer mi contraseña</a>
                     </div>
-                `
-            })
-        });
+                    <hr style="border: none; border-top: 1px solid #eee; margin-top: 30px;" />
+                    <p style="font-size: 11px; color: #999; text-align: center;">Si no solicitaste esto, ignora este mensaje.</p>
+                </div>
+            `
+        };
 
-        if (!respuestaBrevo.ok) {
-            const errorDetalle = await respuestaBrevo.json();
-            console.error("Error API Brevo:", errorDetalle);
-            return res.status(500).json({ estado: 0, mensaje: "No se pudo enviar el correo de recuperación." });
-        }
-
+        // 3. Enviar el correo
+        const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
+        console.log('📨 Correo enviado correctamente:', data.messageId);
+        
         res.status(200).json({ estado: 1, mensaje: "Correo de recuperación enviado. Revisa tu bandeja de entrada." });
 
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ estado: 0, mensaje: "Error del servidor." });
+        console.error('❌ Error al enviar correo:', error);
+        res.status(500).json({ estado: 0, mensaje: "Error al enviar el correo." });
     }
 };
 
