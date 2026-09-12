@@ -10,6 +10,7 @@ import { conmysql } from "../db.js";
 const transporter = nodemailer.createTransport({
     host: "smtp-relay.brevo.com",
     port: 2525,
+    secure: false, // El puerto 2525 no usa SSL nativo
     auth: {
         user: process.env.BREVO_USER,
         pass: process.env.BREVO_PASS,
