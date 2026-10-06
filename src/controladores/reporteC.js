@@ -3210,3 +3210,91 @@ export const enviarReporteEspecie = async (req, res) => {
         if (conexion) conexion.release();
     }
 };
+
+// ======================================================
+// OBTENER HISTORIAL DE REPORTES
+// ======================================================
+
+export const getHistorialReportes = async (req, res) => {
+    try {
+        const idUsuario = Number(req.params.id_usuario);
+
+        if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Usuario no válido"
+            });
+        }
+
+        console.log("==========================================");
+        console.log("📚 CONSULTANDO HISTORIAL DE REPORTES");
+        console.log("👤 Usuario:", idUsuario);
+
+        const [reportes] = await conmysql.query(`
+            SELECT
+                rep.id_reporte,
+                rep.id_captura,
+                rep.id_usuario,
+                rep.id_tipo_reporte,
+                rep.titulo,
+                rep.archivo_pdf,
+                rep.archivo_csv,
+                rep.fecha_generacion,
+
+                tr.nombre_tipo,
+
+                c.peso,
+                c.fecha_hora AS fecha_captura,
+
+                d.id_deteccion,
+                d.imagen_url,
+                d.porcentaje,
+
+                e.id_especie,
+                e.nombre_comun AS especie,
+                e.nombre_cientifico,
+
+                u.nombre,
+                u.apellido
+
+            FROM reportes rep
+            INNER JOIN tipos_reporte tr
+                ON rep.id_tipo_reporte = tr.id_tipo_reporte
+            INNER JOIN capturas c
+                ON rep.id_captura = c.id_captura
+            INNER JOIN detecciones d
+                ON c.id_deteccion = d.id_deteccion
+            INNER JOIN especies e
+                ON d.id_especie = e.id_especie
+            INNER JOIN usuarios u
+                ON rep.id_usuario = u.id_usuario
+
+            WHERE rep.id_usuario = ?
+              AND rep.id_tipo_reporte IS NOT NULL
+              AND rep.titulo IS NOT NULL
+              AND rep.archivo_pdf = 1
+              AND rep.archivo_csv = 1
+              AND c.estado = 1
+
+            ORDER BY rep.fecha_generacion DESC, rep.id_reporte DESC
+        `, [idUsuario]);
+
+        console.log("📊 Registros encontrados:", reportes.length);
+        console.log("==========================================");
+
+        return res.status(200).json({
+            estado: 1,
+            mensaje: "Historial obtenido correctamente",
+            total: reportes.length,
+            data: reportes
+        });
+
+    } catch (error) {
+        console.error("❌ Error getHistorialReportes:", error);
+
+        return res.status(500).json({
+            estado: 0,
+            mensaje: "Error al obtener el historial de reportes"
+        });
+    }
+};

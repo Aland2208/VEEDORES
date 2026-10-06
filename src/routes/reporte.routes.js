@@ -8,7 +8,8 @@ import {
     getReportesPendientesHoy,
     generarPDFEspecie,
     generarCSVEspecie,
-    enviarReporteEspecie
+    enviarReporteEspecie,
+    getHistorialReportes
 
 } from "../controladores/reporteC.js";
 
@@ -16,11 +17,7 @@ import {
 const router = Router();
 
 
-router.get(
-    "/tipos",
-    getTiposReporte
-);
-
+router.get("/tipos", getTiposReporte);
 
 router.get(
     "/pendientes/hoy/:id_usuario",
@@ -52,5 +49,6 @@ router.post(
 
 router.post("/generar-csv-especie", generarCSVEspecie);
 router.patch("/enviar-especie", enviarReporteEspecie);
+router.get("/historial/:id_usuario", getHistorialReportes);
 
 export default router;
