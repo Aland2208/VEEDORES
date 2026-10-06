@@ -2,7 +2,7 @@ import { conmysql } from "../db.js";
 
 
 // ======================================================
-// OBTENER DATOS PARA REPORTE DE CAPTURAS POR USUARIO
+// OBTENER REPORTE DE CAPTURAS DEL USUARIO
 // ======================================================
 
 export const getReporteCapturas = async (req, res) => {
@@ -11,6 +11,10 @@ export const getReporteCapturas = async (req, res) => {
 
         const { id_usuario } = req.params;
 
+
+        // ==============================================
+        // VALIDAR USUARIO
+        // ==============================================
 
         if (!id_usuario) {
 
@@ -24,11 +28,11 @@ export const getReporteCapturas = async (req, res) => {
         }
 
 
-        // ==========================================
-        // DATOS DEL USUARIO
-        // ==========================================
+        // ==============================================
+        // CONSULTAR INFORMACIÓN DEL USUARIO
+        // ==============================================
 
-        const [usuario] = await conmysql.query(
+        const [usuarios] = await conmysql.query(
 
             `SELECT
 
@@ -45,15 +49,14 @@ export const getReporteCapturas = async (req, res) => {
             INNER JOIN roles r
                 ON u.id_rol = r.id_rol
 
-            WHERE u.id_usuario = ?
-              AND u.estado = 1`,
+            WHERE u.id_usuario = ?`,
 
             [id_usuario]
 
         );
 
 
-        if (usuario.length <= 0) {
+        if (usuarios.length === 0) {
 
             return res.status(404).json({
 
@@ -65,9 +68,9 @@ export const getReporteCapturas = async (req, res) => {
         }
 
 
-        // ==========================================
-        // CAPTURAS DEL USUARIO
-        // ==========================================
+        // ==============================================
+        // CONSULTAR CAPTURAS
+        // ==============================================
 
         const [capturas] = await conmysql.query(
 
@@ -80,11 +83,11 @@ export const getReporteCapturas = async (req, res) => {
                 e.id_especie,
                 e.nombre_comun AS especie,
                 e.nombre_cientifico,
-                e.descripcion AS descripcion_especie,
 
                 c.peso,
 
-                d.porcentaje AS porcentaje_deteccion,
+                d.porcentaje,
+
                 d.imagen_url,
 
                 DATE_FORMAT(
@@ -110,87 +113,97 @@ export const getReporteCapturas = async (req, res) => {
             INNER JOIN especies e
                 ON d.id_especie = e.id_especie
 
-            WHERE c.id_usuario = ?
-              AND c.estado = 1
+            WHERE
+                c.id_usuario = ?
+                AND c.estado = 1
 
-            ORDER BY c.fecha_hora DESC`,
-
-            [id_usuario]
-
-        );
-
-
-        // ==========================================
-        // RESUMEN
-        // ==========================================
-
-        const [resumen] = await conmysql.query(
-
-            `SELECT
-
-                COUNT(c.id_captura) AS total_capturas,
-
-                COUNT(
-                    DISTINCT d.id_especie
-                ) AS total_especies,
-
-                COALESCE(
-                    SUM(c.peso),
-                    0
-                ) AS peso_total,
-
-                COALESCE(
-                    AVG(c.peso),
-                    0
-                ) AS peso_promedio
-
-            FROM capturas c
-
-            INNER JOIN detecciones d
-                ON c.id_deteccion = d.id_deteccion
-
-            WHERE c.id_usuario = ?
-              AND c.estado = 1`,
+            ORDER BY
+                c.fecha_hora DESC`,
 
             [id_usuario]
 
         );
 
 
-        // ==========================================
+        // ==============================================
+        // CALCULAR RESUMEN
+        // ==============================================
+
+        const totalCapturas =
+            capturas.length;
+
+
+        const pesoTotal =
+            capturas.reduce(
+
+                (total, captura) => {
+
+                    return total +
+                        Number(captura.peso || 0);
+
+                },
+
+                0
+
+            );
+
+
+        const confianzaTotal =
+            capturas.reduce(
+
+                (total, captura) => {
+
+                    return total +
+                        Number(captura.porcentaje || 0);
+
+                },
+
+                0
+
+            );
+
+
+        const confianzaPromedio =
+            totalCapturas > 0
+
+                ? confianzaTotal / totalCapturas
+
+                : 0;
+
+
+        // ==============================================
         // RESPUESTA
-        // ==========================================
+        // ==============================================
 
         res.json({
 
             estado: 1,
 
-            tipo_reporte: {
-                id_tipo_reporte: 1,
-                nombre_tipo: "Reporte de Capturas"
-            },
+            mensaje:
+                "Reporte obtenido correctamente",
 
-            usuario: usuario[0],
+            usuario:
+                usuarios[0],
 
             resumen: {
 
                 total_capturas:
-                    Number(resumen[0].total_capturas),
-
-                total_especies:
-                    Number(resumen[0].total_especies),
+                    totalCapturas,
 
                 peso_total:
-                    Number(resumen[0].peso_total),
+                    Number(
+                        pesoTotal.toFixed(2)
+                    ),
 
-                peso_promedio:
-                    Number(resumen[0].peso_promedio)
+                confianza_promedio:
+                    Number(
+                        confianzaPromedio.toFixed(2)
+                    )
 
             },
 
-            cantidad: capturas.length,
-
-            data: capturas
+            data:
+                capturas
 
         });
 
@@ -198,8 +211,8 @@ export const getReporteCapturas = async (req, res) => {
 
     catch (error) {
 
-        console.log(
-            "Error getReporteCapturas:",
+        console.error(
+            "❌ Error getReporteCapturas:",
             error
         );
 
@@ -207,7 +220,8 @@ export const getReporteCapturas = async (req, res) => {
         res.status(500).json({
 
             estado: 0,
-            mensaje: "Error del servidor"
+            mensaje:
+                "Error del servidor"
 
         });
 
@@ -216,12 +230,11 @@ export const getReporteCapturas = async (req, res) => {
 };
 
 
-
 // ======================================================
-// OBTENER REPORTE DE CAPTURAS POR FECHA
+// REPORTE POR RANGO DE FECHAS
 // ======================================================
 
-export const getReporteCapturasPorFecha = async (req, res) => {
+export const getReportePorFechas = async (req, res) => {
 
     try {
 
@@ -233,8 +246,24 @@ export const getReporteCapturasPorFecha = async (req, res) => {
         } = req.query;
 
 
+        // ==============================================
+        // VALIDACIONES
+        // ==============================================
+
+        if (!id_usuario) {
+
+            return res.status(400).json({
+
+                estado: 0,
+                mensaje:
+                    "Debe enviar el id_usuario"
+
+            });
+
+        }
+
+
         if (
-            !id_usuario ||
             !fecha_inicio ||
             !fecha_fin
         ) {
@@ -242,19 +271,20 @@ export const getReporteCapturasPorFecha = async (req, res) => {
             return res.status(400).json({
 
                 estado: 0,
+
                 mensaje:
-                    "Debe enviar id_usuario, fecha_inicio y fecha_fin"
+                    "Debe enviar fecha_inicio y fecha_fin"
 
             });
 
         }
 
 
-        // ==========================================
-        // USUARIO + ROL
-        // ==========================================
+        // ==============================================
+        // CONSULTAR USUARIO
+        // ==============================================
 
-        const [usuario] = await conmysql.query(
+        const [usuarios] = await conmysql.query(
 
             `SELECT
 
@@ -271,29 +301,29 @@ export const getReporteCapturasPorFecha = async (req, res) => {
             INNER JOIN roles r
                 ON u.id_rol = r.id_rol
 
-            WHERE u.id_usuario = ?
-              AND u.estado = 1`,
+            WHERE u.id_usuario = ?`,
 
             [id_usuario]
 
         );
 
 
-        if (usuario.length <= 0) {
+        if (usuarios.length === 0) {
 
             return res.status(404).json({
 
                 estado: 0,
-                mensaje: "Usuario no encontrado"
+                mensaje:
+                    "Usuario no encontrado"
 
             });
 
         }
 
 
-        // ==========================================
-        // CAPTURAS
-        // ==========================================
+        // ==============================================
+        // CONSULTAR CAPTURAS POR FECHA
+        // ==============================================
 
         const [capturas] = await conmysql.query(
 
@@ -306,11 +336,11 @@ export const getReporteCapturasPorFecha = async (req, res) => {
                 e.id_especie,
                 e.nombre_comun AS especie,
                 e.nombre_cientifico,
-                e.descripcion AS descripcion_especie,
 
                 c.peso,
 
-                d.porcentaje AS porcentaje_deteccion,
+                d.porcentaje,
+
                 d.imagen_url,
 
                 DATE_FORMAT(
@@ -336,60 +366,16 @@ export const getReporteCapturasPorFecha = async (req, res) => {
             INNER JOIN especies e
                 ON d.id_especie = e.id_especie
 
-            WHERE c.id_usuario = ?
+            WHERE
+                c.id_usuario = ?
 
-              AND c.estado = 1
+                AND c.estado = 1
 
-              AND DATE(c.fecha_hora)
-                  BETWEEN ? AND ?
+                AND DATE(c.fecha_hora)
+                    BETWEEN ? AND ?
 
-            ORDER BY c.fecha_hora DESC`,
-
-            [
-                id_usuario,
-                fecha_inicio,
-                fecha_fin
-            ]
-
-        );
-
-
-        // ==========================================
-        // RESUMEN DEL PERIODO
-        // ==========================================
-
-        const [resumen] = await conmysql.query(
-
-            `SELECT
-
-                COUNT(c.id_captura)
-                    AS total_capturas,
-
-                COUNT(
-                    DISTINCT d.id_especie
-                ) AS total_especies,
-
-                COALESCE(
-                    SUM(c.peso),
-                    0
-                ) AS peso_total,
-
-                COALESCE(
-                    AVG(c.peso),
-                    0
-                ) AS peso_promedio
-
-            FROM capturas c
-
-            INNER JOIN detecciones d
-                ON c.id_deteccion = d.id_deteccion
-
-            WHERE c.id_usuario = ?
-
-              AND c.estado = 1
-
-              AND DATE(c.fecha_hora)
-                  BETWEEN ? AND ?`,
+            ORDER BY
+                c.fecha_hora DESC`,
 
             [
                 id_usuario,
@@ -399,42 +385,93 @@ export const getReporteCapturasPorFecha = async (req, res) => {
 
         );
 
+
+        // ==============================================
+        // CALCULAR RESUMEN
+        // ==============================================
+
+        const totalCapturas =
+            capturas.length;
+
+
+        const pesoTotal =
+            capturas.reduce(
+
+                (total, captura) => {
+
+                    return total +
+                        Number(captura.peso || 0);
+
+                },
+
+                0
+
+            );
+
+
+        const confianzaTotal =
+            capturas.reduce(
+
+                (total, captura) => {
+
+                    return total +
+                        Number(captura.porcentaje || 0);
+
+                },
+
+                0
+
+            );
+
+
+        const confianzaPromedio =
+            totalCapturas > 0
+
+                ? confianzaTotal / totalCapturas
+
+                : 0;
+
+
+        // ==============================================
+        // RESPUESTA
+        // ==============================================
 
         res.json({
 
             estado: 1,
 
-            tipo_reporte: {
-                id_tipo_reporte: 1,
-                nombre_tipo: "Reporte de Capturas"
-            },
+            mensaje:
+                "Reporte por fechas obtenido correctamente",
 
-            usuario: usuario[0],
+            usuario:
+                usuarios[0],
 
-            periodo: {
+            filtros: {
+
                 fecha_inicio,
                 fecha_fin
+
             },
 
             resumen: {
 
                 total_capturas:
-                    Number(resumen[0].total_capturas),
-
-                total_especies:
-                    Number(resumen[0].total_especies),
+                    totalCapturas,
 
                 peso_total:
-                    Number(resumen[0].peso_total),
+                    Number(
+                        pesoTotal.toFixed(2)
+                    ),
 
-                peso_promedio:
-                    Number(resumen[0].peso_promedio)
+                confianza_promedio:
+                    Number(
+                        confianzaPromedio.toFixed(2)
+                    )
 
             },
 
-            cantidad: capturas.length,
-
-            data: capturas
+            data:
+                capturas
 
         });
 
@@ -442,8 +479,8 @@ export const getReporteCapturasPorFecha = async (req, res) => {
 
     catch (error) {
 
-        console.log(
-            "Error getReporteCapturasPorFecha:",
+        console.error(
+            "❌ Error getReportePorFechas:",
             error
         );
 
@@ -451,7 +488,8 @@ export const getReporteCapturasPorFecha = async (req, res) => {
         res.status(500).json({
 
             estado: 0,
-            mensaje: "Error del servidor"
+            mensaje:
+                "Error del servidor"
 
         });
 
@@ -460,9 +498,8 @@ export const getReporteCapturasPorFecha = async (req, res) => {
 };
 
 
-
 // ======================================================
-// OBTENER RESUMEN POR ESPECIE
+// RESUMEN POR ESPECIES
 // ======================================================
 
 export const getResumenEspecies = async (req, res) => {
@@ -477,12 +514,17 @@ export const getResumenEspecies = async (req, res) => {
             return res.status(400).json({
 
                 estado: 0,
-                mensaje: "Debe enviar el id_usuario"
+                mensaje:
+                    "Debe enviar el id_usuario"
 
             });
 
         }
 
+
+        // ==============================================
+        // AGRUPAR POR ESPECIE
+        // ==============================================
 
         const [result] = await conmysql.query(
 
@@ -494,30 +536,32 @@ export const getResumenEspecies = async (req, res) => {
 
                 e.nombre_cientifico,
 
-                COUNT(
-                    c.id_captura
-                ) AS cantidad_capturas,
+                COUNT(c.id_captura)
+                    AS cantidad_capturas,
 
-                COALESCE(
+                ROUND(
                     SUM(c.peso),
-                    0
+                    2
                 ) AS peso_total,
 
-                COALESCE(
-                    AVG(c.peso),
-                    0
-                ) AS peso_promedio
+                ROUND(
+                    AVG(d.porcentaje),
+                    2
+                ) AS confianza_promedio
 
             FROM capturas c
 
             INNER JOIN detecciones d
-                ON c.id_deteccion = d.id_deteccion
+                ON c.id_deteccion =
+                   d.id_deteccion
 
             INNER JOIN especies e
-                ON d.id_especie = e.id_especie
+                ON d.id_especie =
+                   e.id_especie
 
-            WHERE c.id_usuario = ?
-              AND c.estado = 1
+            WHERE
+                c.id_usuario = ?
+                AND c.estado = 1
 
             GROUP BY
 
@@ -525,7 +569,8 @@ export const getResumenEspecies = async (req, res) => {
                 e.nombre_comun,
                 e.nombre_cientifico
 
-            ORDER BY cantidad_capturas DESC`,
+            ORDER BY
+                cantidad_capturas DESC`,
 
             [id_usuario]
 
@@ -536,9 +581,11 @@ export const getResumenEspecies = async (req, res) => {
 
             estado: 1,
 
-            cantidad_especies: result.length,
+            cantidad_especies:
+                result.length,
 
-            data: result
+            data:
+                result
 
         });
 
@@ -546,8 +593,8 @@ export const getResumenEspecies = async (req, res) => {
 
     catch (error) {
 
-        console.log(
-            "Error getResumenEspecies:",
+        console.error(
+            "❌ Error getResumenEspecies:",
             error
         );
 
@@ -555,14 +602,14 @@ export const getResumenEspecies = async (req, res) => {
         res.status(500).json({
 
             estado: 0,
-            mensaje: "Error del servidor"
+            mensaje:
+                "Error del servidor"
 
         });
 
     }
 
 };
-
 
 
 // ======================================================
@@ -573,28 +620,32 @@ export const getTiposReporte = async (req, res) => {
 
     try {
 
-        const [result] = await conmysql.query(
+        const [result] =
+            await conmysql.query(
 
-            `SELECT
+                `SELECT
 
-                id_tipo_reporte,
-                nombre_tipo,
-                descripcion
+                    id_tipo_reporte,
 
-            FROM tipos_reporte
+                    nombre_tipo
 
-            ORDER BY id_tipo_reporte ASC`
+                FROM tipos_reporte
 
-        );
+                ORDER BY
+                    id_tipo_reporte ASC`
+
+            );
 
 
         res.json({
 
             estado: 1,
 
-            cantidad: result.length,
+            cantidad:
+                result.length,
 
-            data: result
+            data:
+                result
 
         });
 
@@ -602,8 +653,8 @@ export const getTiposReporte = async (req, res) => {
 
     catch (error) {
 
-        console.log(
-            "Error getTiposReporte:",
+        console.error(
+            "❌ Error getTiposReporte:",
             error
         );
 
@@ -611,7 +662,9 @@ export const getTiposReporte = async (req, res) => {
         res.status(500).json({
 
             estado: 0,
-            mensaje: "Error del servidor"
+
+            mensaje:
+                "Error del servidor"
 
         });
 
