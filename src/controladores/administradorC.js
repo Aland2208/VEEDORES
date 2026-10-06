@@ -3,7 +3,7 @@ import { conmysql } from '../db.js';
 /* BUSCAR ADMINISTRADOR POR CORREO */
 export const buscarAdministradorPorCorreo=async(req,res)=>{
     try{
-        let correo=String(req.query.correo||'').trim().toLowerCase();
+        const correo=String(req.query.correo||'').trim().toLowerCase();
 
         if(!correo){
             return res.status(400).json({
@@ -39,12 +39,14 @@ export const buscarAdministradorPorCorreo=async(req,res)=>{
         });
     }catch(error){
         console.error('❌ Error buscarAdministradorPorCorreo:',error);
+
         return res.status(500).json({
             estado:0,
             mensaje:'Error al buscar el administrador.'
         });
     }
 };
+
 
 /* OBTENER ADMINISTRADOR ACTUAL DEL OBSERVADOR */
 export const getAdministradorActual=async(req,res)=>{
@@ -67,7 +69,8 @@ export const getAdministradorActual=async(req,res)=>{
                 u.apellido,
                 u.correo
             FROM administrador a
-            INNER JOIN usuarios u ON u.id_usuario=a.id_administrador
+            INNER JOIN usuarios u
+                ON u.id_usuario=a.id_administrador
             WHERE a.id_usuario=?
               AND a.fecha_fin IS NULL
               AND u.id_rol=1
@@ -92,12 +95,14 @@ export const getAdministradorActual=async(req,res)=>{
         });
     }catch(error){
         console.error('❌ Error getAdministradorActual:',error);
+
         return res.status(500).json({
             estado:0,
             mensaje:'Error al obtener el administrador actual.'
         });
     }
 };
+
 
 /* OBTENER OBSERVADORES ACTUALES DE UN ADMINISTRADOR */
 export const getUsuariosAdministrador=async(req,res)=>{
@@ -123,7 +128,8 @@ export const getUsuariosAdministrador=async(req,res)=>{
                 u.fecha_creacion,
                 a.fecha_inicio
             FROM administrador a
-            INNER JOIN usuarios u ON u.id_usuario=a.id_usuario
+            INNER JOIN usuarios u
+                ON u.id_usuario=a.id_usuario
             WHERE a.id_administrador=?
               AND a.fecha_fin IS NULL
               AND u.id_rol=2
@@ -137,12 +143,14 @@ export const getUsuariosAdministrador=async(req,res)=>{
         });
     }catch(error){
         console.error('❌ Error getUsuariosAdministrador:',error);
+
         return res.status(500).json({
             estado:0,
             mensaje:'Error al obtener los usuarios del administrador.'
         });
     }
 };
+
 
 /* OBTENER OBSERVADORES SIN ADMINISTRADOR */
 export const getUsuariosDisponibles=async(req,res)=>{
@@ -174,12 +182,14 @@ export const getUsuariosDisponibles=async(req,res)=>{
         });
     }catch(error){
         console.error('❌ Error getUsuariosDisponibles:',error);
+
         return res.status(500).json({
             estado:0,
             mensaje:'Error al obtener los usuarios disponibles.'
         });
     }
 };
+
 
 /* ASIGNAR OBSERVADOR A ADMINISTRADOR */
 export const asignarUsuario=async(req,res)=>{
@@ -235,7 +245,9 @@ export const asignarUsuario=async(req,res)=>{
         }
 
         const [asignaciones]=await conmysql.query(`
-            SELECT id_asignacion,id_administrador
+            SELECT
+                id_asignacion,
+                id_administrador
             FROM administrador
             WHERE id_usuario=?
               AND fecha_fin IS NULL
@@ -249,13 +261,18 @@ export const asignarUsuario=async(req,res)=>{
             });
         }
 
+        /* HORA DE ECUADOR UTC-5 */
         const [resultado]=await conmysql.query(`
             INSERT INTO administrador(
                 id_administrador,
                 id_usuario,
                 fecha_inicio
             )
-            VALUES(?,?,NOW())
+            VALUES(
+                ?,
+                ?,
+                DATE_SUB(UTC_TIMESTAMP(),INTERVAL 5 HOUR)
+            )
         `,[idAdministrador,idUsuario]);
 
         return res.status(201).json({
@@ -269,12 +286,14 @@ export const asignarUsuario=async(req,res)=>{
         });
     }catch(error){
         console.error('❌ Error asignarUsuario:',error);
+
         return res.status(500).json({
             estado:0,
             mensaje:'Error al asignar el usuario.'
         });
     }
 };
+
 
 /* REASIGNAR OBSERVADOR A OTRO ADMINISTRADOR */
 export const reasignarUsuario=async(req,res)=>{
@@ -306,6 +325,7 @@ export const reasignarUsuario=async(req,res)=>{
 
         if(usuarios.length===0){
             await conexion.rollback();
+
             return res.status(404).json({
                 estado:0,
                 mensaje:'El observador no existe o no está activo.'
@@ -323,6 +343,7 @@ export const reasignarUsuario=async(req,res)=>{
 
         if(administradores.length===0){
             await conexion.rollback();
+
             return res.status(404).json({
                 estado:0,
                 mensaje:'El nuevo administrador no existe o no está activo.'
@@ -330,28 +351,43 @@ export const reasignarUsuario=async(req,res)=>{
         }
 
         const [actual]=await conexion.query(`
-            SELECT id_asignacion,id_administrador
+            SELECT
+                id_asignacion,
+                id_administrador
             FROM administrador
             WHERE id_usuario=?
               AND fecha_fin IS NULL
             FOR UPDATE
         `,[idUsuario]);
 
-        if(actual.length>0&&
-           Number(actual[0].id_administrador)===idNuevoAdministrador){
+        if(
+            actual.length>0 &&
+            Number(actual[0].id_administrador)===idNuevoAdministrador
+        ){
             await conexion.rollback();
+
             return res.status(409).json({
                 estado:0,
                 mensaje:'El usuario ya pertenece a este administrador.'
             });
         }
 
+        /*
+         * OBTENEMOS UNA SOLA FECHA DE ECUADOR.
+         * La misma fecha se utiliza para cerrar la asignación
+         * anterior y comenzar la nueva.
+         */
         const [fecha]=await conexion.query(`
-            SELECT NOW() AS fecha_cambio
+            SELECT
+                DATE_SUB(
+                    UTC_TIMESTAMP(),
+                    INTERVAL 5 HOUR
+                ) AS fecha_cambio
         `);
 
         const fechaCambio=fecha[0].fecha_cambio;
 
+        /* CERRAR ASIGNACIÓN ANTERIOR */
         if(actual.length>0){
             await conexion.query(`
                 UPDATE administrador
@@ -360,6 +396,7 @@ export const reasignarUsuario=async(req,res)=>{
             `,[fechaCambio,actual[0].id_asignacion]);
         }
 
+        /* CREAR NUEVA ASIGNACIÓN */
         const [resultado]=await conexion.query(`
             INSERT INTO administrador(
                 id_administrador,
@@ -381,7 +418,9 @@ export const reasignarUsuario=async(req,res)=>{
             }
         });
     }catch(error){
-        if(conexion) await conexion.rollback();
+        if(conexion){
+            await conexion.rollback();
+        }
 
         console.error('❌ Error reasignarUsuario:',error);
 
@@ -390,9 +429,12 @@ export const reasignarUsuario=async(req,res)=>{
             mensaje:'Error al reasignar el usuario.'
         });
     }finally{
-        if(conexion) conexion.release();
+        if(conexion){
+            conexion.release();
+        }
     }
 };
+
 
 /* FINALIZAR ASIGNACIÓN ACTUAL */
 export const quitarUsuarioAdministrador=async(req,res)=>{
@@ -410,7 +452,11 @@ export const quitarUsuarioAdministrador=async(req,res)=>{
 
         const [resultado]=await conmysql.query(`
             UPDATE administrador
-            SET fecha_fin=NOW()
+            SET fecha_fin=
+                DATE_SUB(
+                    UTC_TIMESTAMP(),
+                    INTERVAL 5 HOUR
+                )
             WHERE id_administrador=?
               AND id_usuario=?
               AND fecha_fin IS NULL
@@ -429,12 +475,14 @@ export const quitarUsuarioAdministrador=async(req,res)=>{
         });
     }catch(error){
         console.error('❌ Error quitarUsuarioAdministrador:',error);
+
         return res.status(500).json({
             estado:0,
             mensaje:'Error al finalizar la asignación.'
         });
     }
 };
+
 
 /* HISTORIAL DE ADMINISTRADORES DE UN OBSERVADOR */
 export const getHistorialUsuario=async(req,res)=>{
@@ -453,11 +501,16 @@ export const getHistorialUsuario=async(req,res)=>{
                 a.id_asignacion,
                 a.id_administrador,
                 a.id_usuario,
-                CONCAT(u.nombre,' ',u.apellido) AS administrador,
+                CONCAT(
+                    u.nombre,
+                    ' ',
+                    u.apellido
+                ) AS administrador,
                 a.fecha_inicio,
                 a.fecha_fin,
                 CASE
-                    WHEN a.fecha_fin IS NULL THEN 'Activo'
+                    WHEN a.fecha_fin IS NULL
+                    THEN 'Activo'
                     ELSE 'Finalizado'
                 END AS estado_asignacion
             FROM administrador a
@@ -474,6 +527,7 @@ export const getHistorialUsuario=async(req,res)=>{
         });
     }catch(error){
         console.error('❌ Error getHistorialUsuario:',error);
+
         return res.status(500).json({
             estado:0,
             mensaje:'Error al obtener el historial.'
