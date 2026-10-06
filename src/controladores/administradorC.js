@@ -46,6 +46,59 @@ export const buscarAdministradorPorCorreo=async(req,res)=>{
     }
 };
 
+/* OBTENER ADMINISTRADOR ACTUAL DEL OBSERVADOR */
+export const getAdministradorActual=async(req,res)=>{
+    try{
+        const idUsuario=Number(req.params.id_usuario);
+
+        if(!Number.isInteger(idUsuario)||idUsuario<=0){
+            return res.status(400).json({
+                estado:0,
+                mensaje:'Usuario no válido.'
+            });
+        }
+
+        const [resultado]=await conmysql.query(`
+            SELECT
+                a.id_asignacion,
+                a.id_administrador,
+                a.fecha_inicio,
+                u.nombre,
+                u.apellido,
+                u.correo
+            FROM administrador a
+            INNER JOIN usuarios u ON u.id_usuario=a.id_administrador
+            WHERE a.id_usuario=?
+              AND a.fecha_fin IS NULL
+              AND u.id_rol=1
+              AND u.estado=1
+            LIMIT 1
+        `,[idUsuario]);
+
+        if(resultado.length===0){
+            return res.status(200).json({
+                estado:1,
+                vinculado:false,
+                mensaje:'El usuario no tiene un administrador vinculado.',
+                data:null
+            });
+        }
+
+        return res.status(200).json({
+            estado:1,
+            vinculado:true,
+            mensaje:'Administrador actual obtenido correctamente.',
+            data:resultado[0]
+        });
+    }catch(error){
+        console.error('❌ Error getAdministradorActual:',error);
+        return res.status(500).json({
+            estado:0,
+            mensaje:'Error al obtener el administrador actual.'
+        });
+    }
+};
+
 /* OBTENER OBSERVADORES ACTUALES DE UN ADMINISTRADOR */
 export const getUsuariosAdministrador=async(req,res)=>{
     try{
