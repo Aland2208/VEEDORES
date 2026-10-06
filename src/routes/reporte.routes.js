@@ -49,6 +49,6 @@ router.post(
 
 router.post("/generar-csv-especie", generarCSVEspecie);
 router.patch("/enviar-especie", enviarReporteEspecie);
-router.get("/historial/:id_usuario", getHistorialReportes);
+router.get("/historial", getHistorialReportes);
 
 export default router;

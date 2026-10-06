@@ -3212,12 +3212,27 @@ export const enviarReporteEspecie = async (req, res) => {
 };
 
 // ======================================================
-// OBTENER HISTORIAL DE REPORTES
+// HISTORIAL DE REPORTES CON FILTROS Y PAGINACIÓN
 // ======================================================
 
 export const getHistorialReportes = async (req, res) => {
     try {
-        const idUsuario = Number(req.params.id_usuario);
+        const {
+            id_usuario,
+            fecha_inicio,
+            fecha_fin,
+            id_especie,
+            id_observador,
+            id_tipo_reporte,
+            busqueda,
+            pagina = 1,
+            limite = 10
+        } = req.query;
+
+        const idUsuario = Number(id_usuario);
+        const paginaActual = Math.max(Number(pagina) || 1, 1);
+        const limitePagina = Math.min(Math.max(Number(limite) || 10, 1), 50);
+        const offset = (paginaActual - 1) * limitePagina;
 
         if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
             return res.status(400).json({
@@ -3229,64 +3244,142 @@ export const getHistorialReportes = async (req, res) => {
         console.log("==========================================");
         console.log("📚 CONSULTANDO HISTORIAL DE REPORTES");
         console.log("👤 Usuario:", idUsuario);
+        console.log("📄 Página:", paginaActual);
+        console.log("🔢 Límite:", limitePagina);
 
-        const [reportes] = await conmysql.query(`
+        // Condiciones dinámicas
+        const condiciones = [
+            "rep.id_usuario = ?",
+            "rep.id_tipo_reporte IS NOT NULL",
+            "rep.titulo IS NOT NULL",
+            "rep.archivo_pdf = 1",
+            "rep.archivo_csv = 1",
+            "c.estado = 1"
+        ];
+
+        const parametros = [idUsuario];
+
+        if (fecha_inicio) {
+            condiciones.push("DATE(rep.fecha_generacion) >= ?");
+            parametros.push(fecha_inicio);
+        }
+
+        if (fecha_fin) {
+            condiciones.push("DATE(rep.fecha_generacion) <= ?");
+            parametros.push(fecha_fin);
+        }
+
+        if (id_especie) {
+            condiciones.push("d.id_especie = ?");
+            parametros.push(Number(id_especie));
+        }
+
+        if (id_observador) {
+            condiciones.push("rep.id_usuario = ?");
+            parametros.push(Number(id_observador));
+        }
+
+        if (id_tipo_reporte) {
+            condiciones.push("rep.id_tipo_reporte = ?");
+            parametros.push(Number(id_tipo_reporte));
+        }
+
+        if (busqueda?.trim()) {
+            condiciones.push("rep.titulo LIKE ?");
+            parametros.push(`%${busqueda.trim()}%`);
+        }
+
+        const where = condiciones.join(" AND ");
+
+        // ==================================================
+        // CONTAR REPORTES AGRUPADOS
+        // ==================================================
+
+        const [conteo] = await conmysql.query(`
+            SELECT COUNT(*) AS total
+            FROM (
+                SELECT
+                    rep.id_usuario,
+                    d.id_especie,
+                    rep.id_tipo_reporte,
+                    rep.titulo,
+                    DATE(rep.fecha_generacion) AS fecha
+                FROM reportes rep
+                INNER JOIN capturas c ON rep.id_captura = c.id_captura
+                INNER JOIN detecciones d ON c.id_deteccion = d.id_deteccion
+                WHERE ${where}
+                GROUP BY
+                    rep.id_usuario,
+                    d.id_especie,
+                    rep.id_tipo_reporte,
+                    rep.titulo,
+                    DATE(rep.fecha_generacion)
+            ) AS grupos
+        `, parametros);
+
+        const total = Number(conteo[0]?.total || 0);
+        const totalPaginas = Math.ceil(total / limitePagina);
+
+        // ==================================================
+        // OBTENER SOLO LOS GRUPOS DE LA PÁGINA SOLICITADA
+        // ==================================================
+
+        const [grupos] = await conmysql.query(`
             SELECT
-                rep.id_reporte,
-                rep.id_captura,
+                MIN(rep.id_reporte) AS id_reporte_grupo,
                 rep.id_usuario,
-                rep.id_tipo_reporte,
-                rep.titulo,
-                rep.archivo_pdf,
-                rep.archivo_csv,
-                rep.fecha_generacion,
-
-                tr.nombre_tipo,
-
-                c.peso,
-                c.fecha_hora AS fecha_captura,
-
-                d.id_deteccion,
-                d.imagen_url,
-                d.porcentaje,
-
-                e.id_especie,
+                d.id_especie,
                 e.nombre_comun AS especie,
                 e.nombre_cientifico,
-
+                rep.id_tipo_reporte,
+                tr.nombre_tipo,
+                rep.titulo,
+                DATE(rep.fecha_generacion) AS fecha,
+                MAX(rep.fecha_generacion) AS fecha_generacion,
+                COUNT(*) AS total_capturas,
+                COALESCE(SUM(c.peso), 0) AS peso_total,
+                COALESCE(AVG(d.porcentaje), 0) AS confianza_promedio,
                 u.nombre,
                 u.apellido
-
             FROM reportes rep
+            INNER JOIN capturas c ON rep.id_captura = c.id_captura
+            INNER JOIN detecciones d ON c.id_deteccion = d.id_deteccion
+            INNER JOIN especies e ON d.id_especie = e.id_especie
             INNER JOIN tipos_reporte tr
                 ON rep.id_tipo_reporte = tr.id_tipo_reporte
-            INNER JOIN capturas c
-                ON rep.id_captura = c.id_captura
-            INNER JOIN detecciones d
-                ON c.id_deteccion = d.id_deteccion
-            INNER JOIN especies e
-                ON d.id_especie = e.id_especie
-            INNER JOIN usuarios u
-                ON rep.id_usuario = u.id_usuario
+            INNER JOIN usuarios u ON rep.id_usuario = u.id_usuario
+            WHERE ${where}
+            GROUP BY
+                rep.id_usuario,
+                d.id_especie,
+                e.nombre_comun,
+                e.nombre_cientifico,
+                rep.id_tipo_reporte,
+                tr.nombre_tipo,
+                rep.titulo,
+                DATE(rep.fecha_generacion),
+                u.nombre,
+                u.apellido
+            ORDER BY fecha_generacion DESC
+            LIMIT ? OFFSET ?
+        `, [...parametros, limitePagina, offset]);
 
-            WHERE rep.id_usuario = ?
-              AND rep.id_tipo_reporte IS NOT NULL
-              AND rep.titulo IS NOT NULL
-              AND rep.archivo_pdf = 1
-              AND rep.archivo_csv = 1
-              AND c.estado = 1
-
-            ORDER BY rep.fecha_generacion DESC, rep.id_reporte DESC
-        `, [idUsuario]);
-
-        console.log("📊 Registros encontrados:", reportes.length);
+        console.log("📊 Reportes encontrados:", total);
+        console.log("📄 Grupos devueltos:", grupos.length);
         console.log("==========================================");
 
         return res.status(200).json({
             estado: 1,
             mensaje: "Historial obtenido correctamente",
-            total: reportes.length,
-            data: reportes
+            data: grupos,
+            paginacion: {
+                pagina_actual: paginaActual,
+                limite: limitePagina,
+                total_reportes: total,
+                total_paginas: totalPaginas,
+                tiene_anterior: paginaActual > 1,
+                tiene_siguiente: paginaActual < totalPaginas
+            }
         });
 
     } catch (error) {
