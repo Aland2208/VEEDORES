@@ -90,10 +90,10 @@ export const loginUsuario = async (req, res) => {
 export const solicitarRecuperacion = async (req, res) => {
     try {
         const { correo } = req.body;
-
+        
         // 1. Generar token y guardarlo en MySQL
         const tokenRecuperacion = crypto.randomBytes(20).toString("hex");
-        const fechaExpira = new Date(Date.now() + 3600000);
+        const fechaExpira = new Date(Date.now() + 3600000); 
 
         const [resultado] = await conmysql.query(
             `UPDATE usuarios SET reset_token = ?, reset_token_expira = ? WHERE correo = ?`,
@@ -141,7 +141,7 @@ export const solicitarRecuperacion = async (req, res) => {
 
         const data = await respuestaBrevo.json();
         console.log('📨 Correo enviado correctamente. ID:', data.messageId);
-
+        
         res.status(200).json({ estado: 1, mensaje: "Correo de recuperación enviado. Revisa tu bandeja de entrada." });
 
     } catch (error) {
@@ -184,161 +184,3 @@ export const restablecerPassword = async (req, res) => {
     }
 };
 
-// ==========================================
-// OBTENER PERFIL DEL USUARIO
-// ==========================================
-export const obtenerPerfil = async (req, res) => {
-    try {
-        const idUsuario = Number(req.params.id_usuario);
-
-        if (!idUsuario) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "Usuario no válido."
-            });
-        }
-
-        const [usuarios] = await conmysql.query(
-            `SELECT id_usuario,nombre,apellido,correo
-             FROM usuarios
-             WHERE id_usuario=? AND estado=1
-             LIMIT 1`,
-            [idUsuario]
-        );
-
-        if (usuarios.length === 0) {
-            return res.status(404).json({
-                estado: 0,
-                mensaje: "Usuario no encontrado."
-            });
-        }
-
-        return res.status(200).json({
-            estado: 1,
-            data: usuarios[0]
-        });
-
-    } catch (error) {
-        console.error("❌ Error obtenerPerfil:", error);
-        return res.status(500).json({
-            estado: 0,
-            mensaje: "Error del servidor al obtener el perfil."
-        });
-    }
-};
-
-// ==========================================
-// ACTUALIZAR PERFIL DEL USUARIO
-// ==========================================
-export const actualizarPerfil = async (req, res) => {
-    try {
-        const idUsuario = Number(req.params.id_usuario);
-
-        let { nombre, apellido, correo } = req.body;
-
-        nombre = String(nombre || "").trim();
-        apellido = String(apellido || "").trim();
-        correo = String(correo || "").trim().toLowerCase();
-
-        if (!idUsuario) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "Usuario no válido."
-            });
-        }
-
-        if (!nombre || !apellido || !correo) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "Nombre, apellido y correo son obligatorios."
-            });
-        }
-
-        if (nombre.length > 100) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "El nombre no puede superar los 100 caracteres."
-            });
-        }
-
-        if (apellido.length > 100) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "El apellido no puede superar los 100 caracteres."
-            });
-        }
-
-        if (correo.length > 150) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "El correo no puede superar los 150 caracteres."
-            });
-        }
-
-        const correoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-        if (!correoValido.test(correo)) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "Ingrese un correo electrónico válido."
-            });
-        }
-
-        // Verificar que el usuario exista
-        const [usuarios] = await conmysql.query(
-            `SELECT id_usuario
-             FROM usuarios
-             WHERE id_usuario=? AND estado=1
-             LIMIT 1`,
-            [idUsuario]
-        );
-
-        if (usuarios.length === 0) {
-            return res.status(404).json({
-                estado: 0,
-                mensaje: "Usuario no encontrado."
-            });
-        }
-
-        // Verificar que el correo no pertenezca a otro usuario
-        const [correoExistente] = await conmysql.query(
-            `SELECT id_usuario
-             FROM usuarios
-             WHERE correo=? AND id_usuario<>?
-             LIMIT 1`,
-            [correo, idUsuario]
-        );
-
-        if (correoExistente.length > 0) {
-            return res.status(409).json({
-                estado: 0,
-                mensaje: "El correo electrónico ya está registrado."
-            });
-        }
-
-        await conmysql.query(
-            `UPDATE usuarios
-             SET nombre=?,apellido=?,correo=?
-             WHERE id_usuario=?`,
-            [nombre, apellido, correo, idUsuario]
-        );
-
-        return res.status(200).json({
-            estado: 1,
-            mensaje: "Información actualizada correctamente.",
-            data: {
-                id_usuario: idUsuario,
-                nombre,
-                apellido,
-                correo
-            }
-        });
-
-    } catch (error) {
-        console.error("❌ Error actualizarPerfil:", error);
-        return res.status(500).json({
-            estado: 0,
-            mensaje: "Error del servidor al actualizar el perfil."
-        });
-    }
-};
