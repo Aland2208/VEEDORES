@@ -1,9 +1,10 @@
 import { conmysql } from "../db.js";
 import { getIO } from "../websocket/socket.js";
 
-// ==============================
-// REGISTRAR DETECCION
-// ==============================
+
+// ==========================================
+// REGISTRAR DETECCIÓN
+// ==========================================
 
 export const registrarDeteccion = async (req, res) => {
 
@@ -11,17 +12,39 @@ export const registrarDeteccion = async (req, res) => {
 
         const {
             id_especie,
-            imagen_url
+            imagen_url,
+            porcentaje
         } = req.body;
+
+
+        // ======================================
+        // VALIDACIONES
+        // ======================================
 
         if (id_especie == null) {
 
             return res.status(400).json({
+
                 estado: 0,
                 mensaje: "Debe enviar el id_especie"
+
             });
 
         }
+
+
+        // Si no llega porcentaje,
+        // se guarda 0.00
+
+        const porcentajeFinal =
+            porcentaje != null
+                ? Number(porcentaje)
+                : 0;
+
+
+        // ======================================
+        // INSERTAR DETECCIÓN
+        // ======================================
 
         const [result] = await conmysql.query(
 
@@ -29,10 +52,12 @@ export const registrarDeteccion = async (req, res) => {
             (
                 id_especie,
                 imagen_url,
+                porcentaje,
                 fecha_hora
             )
             VALUES
             (
+                ?,
                 ?,
                 ?,
                 CONVERT_TZ(
@@ -44,10 +69,16 @@ export const registrarDeteccion = async (req, res) => {
 
             [
                 id_especie,
-                imagen_url || null
+                imagen_url || null,
+                porcentajeFinal
             ]
 
         );
+
+
+        // ======================================
+        // CONSULTAR DETECCIÓN CREADA
+        // ======================================
 
         const [registro] = await conmysql.query(
 
@@ -55,7 +86,12 @@ export const registrarDeteccion = async (req, res) => {
 
                 d.id_deteccion,
                 d.id_especie,
+
                 e.nombre_comun,
+                e.nombre_cientifico,
+
+                d.imagen_url,
+                d.porcentaje,
 
                 DATE_FORMAT(
                     d.fecha_hora,
@@ -65,7 +101,6 @@ export const registrarDeteccion = async (req, res) => {
             FROM detecciones d
 
             INNER JOIN especies e
-
                 ON d.id_especie = e.id_especie
 
             WHERE d.id_deteccion = ?`,
@@ -74,19 +109,37 @@ export const registrarDeteccion = async (req, res) => {
 
         );
 
+
+        // ======================================
+        // WEBSOCKET
+        // ======================================
+
         const io = getIO();
+
 
         if (io) {
 
-            io.emit("nuevaDeteccion", registro[0]);
+            io.emit(
+                "nuevaDeteccion",
+                registro[0]
+            );
 
         }
+
+
+        // ======================================
+        // RESPUESTA
+        // ======================================
 
         res.status(201).json({
 
             estado: 1,
-            mensaje: "Detección registrada correctamente",
-            data: registro[0]
+
+            mensaje:
+                "Detección registrada correctamente",
+
+            data:
+                registro[0]
 
         });
 
@@ -94,7 +147,11 @@ export const registrarDeteccion = async (req, res) => {
 
     catch (error) {
 
-        console.log(error);
+        console.error(
+            "Error registrarDeteccion:",
+            error
+        );
+
 
         res.status(500).json({
 
@@ -108,9 +165,9 @@ export const registrarDeteccion = async (req, res) => {
 };
 
 
-// ==============================
-// OBTENER TODAS
-// ==============================
+// ==========================================
+// OBTENER TODAS LAS DETECCIONES
+// ==========================================
 
 export const getDetecciones = async (req, res) => {
 
@@ -127,6 +184,7 @@ export const getDetecciones = async (req, res) => {
                 e.nombre_cientifico,
 
                 d.imagen_url,
+                d.porcentaje,
 
                 DATE_FORMAT(
                     d.fecha_hora,
@@ -136,15 +194,16 @@ export const getDetecciones = async (req, res) => {
             FROM detecciones d
 
             INNER JOIN especies e
-
                 ON d.id_especie = e.id_especie
 
             ORDER BY d.id_deteccion DESC`
 
         );
 
+
         res.json({
 
+            estado: 1,
             cantidad: result.length,
             data: result
 
@@ -154,7 +213,11 @@ export const getDetecciones = async (req, res) => {
 
     catch (error) {
 
-        console.log(error);
+        console.error(
+            "Error getDetecciones:",
+            error
+        );
+
 
         res.status(500).json({
 
@@ -168,15 +231,16 @@ export const getDetecciones = async (req, res) => {
 };
 
 
-// ==============================
-// OBTENER POR ID
-// ==============================
+// ==========================================
+// OBTENER DETECCIÓN POR ID
+// ==========================================
 
 export const getDeteccionByID = async (req, res) => {
 
     try {
 
         const { id } = req.params;
+
 
         const [result] = await conmysql.query(
 
@@ -189,6 +253,7 @@ export const getDeteccionByID = async (req, res) => {
                 e.nombre_cientifico,
 
                 d.imagen_url,
+                d.porcentaje,
 
                 DATE_FORMAT(
                     d.fecha_hora,
@@ -198,7 +263,6 @@ export const getDeteccionByID = async (req, res) => {
             FROM detecciones d
 
             INNER JOIN especies e
-
                 ON d.id_especie = e.id_especie
 
             WHERE d.id_deteccion = ?`,
@@ -206,6 +270,7 @@ export const getDeteccionByID = async (req, res) => {
             [id]
 
         );
+
 
         if (result.length <= 0) {
 
@@ -218,13 +283,23 @@ export const getDeteccionByID = async (req, res) => {
 
         }
 
-        res.json(result[0]);
+
+        res.json({
+
+            estado: 1,
+            data: result[0]
+
+        });
 
     }
 
     catch (error) {
 
-        console.log(error);
+        console.error(
+            "Error getDeteccionByID:",
+            error
+        );
+
 
         res.status(500).json({
 
