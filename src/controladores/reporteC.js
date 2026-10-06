@@ -3391,3 +3391,26 @@ export const getHistorialReportes = async (req, res) => {
         });
     }
 };
+
+export const getEspeciesFiltro = async (req, res) => {
+    try {
+        const [especies] = await conmysql.query(`
+            SELECT id_especie, nombre_comun, nombre_cientifico
+            FROM especies
+            ORDER BY nombre_comun ASC
+        `);
+
+        return res.status(200).json({
+            estado: 1,
+            data: especies
+        });
+
+    } catch (error) {
+        console.error("❌ Error getEspeciesFiltro:", error);
+
+        return res.status(500).json({
+            estado: 0,
+            mensaje: "Error al obtener las especies"
+        });
+    }
+};
