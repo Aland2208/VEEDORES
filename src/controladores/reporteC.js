@@ -1,4 +1,5 @@
 import { conmysql } from "../db.js";
+import PDFDocument from "pdfkit";
 
 // ======================================================
 // OBTENER REPORTE DE CAPTURAS DEL USUARIO
