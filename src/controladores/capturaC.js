@@ -71,7 +71,7 @@ export const registrarCaptura = async (req, res) => {
 
 
         if (
-            Number.isNaN(porcentajeFinal) ||
+            !Number.isFinite(porcentajeFinal) ||
             porcentajeFinal < 0 ||
             porcentajeFinal > 100
         ) {
@@ -174,14 +174,77 @@ export const registrarCaptura = async (req, res) => {
         );
 
 
+        const id_captura =
+            captura.insertId;
+
+
         console.log(
             "✅ Captura creada:",
-            captura.insertId
+            id_captura
         );
 
 
         // ======================================
-        // 3. CONSULTAR RESULTADO COMPLETO
+        // 3. CREAR REGISTRO DE REPORTE PENDIENTE
+        // ======================================
+        //
+        // Cuando se registra la captura:
+        //
+        // id_usuario       = usuario que capturó
+        // id_tipo_reporte  = NULL
+        // titulo           = NULL
+        // archivo_pdf      = NULL
+        //
+        // El tipo de reporte se asignará
+        // posteriormente desde el módulo Reportes.
+        // ======================================
+
+        const [reporte] = await conmysql.query(
+
+            `INSERT INTO reportes
+            (
+                id_usuario,
+                id_tipo_reporte,
+                titulo,
+                archivo_pdf,
+                fecha_generacion
+            )
+            VALUES
+            (
+                ?,
+                NULL,
+                NULL,
+                NULL,
+                CONVERT_TZ(
+                    UTC_TIMESTAMP(),
+                    '+00:00',
+                    '-05:00'
+                )
+            )`,
+
+            [
+                id_usuario
+            ]
+
+        );
+
+
+        const id_reporte =
+            reporte.insertId;
+
+
+        console.log(
+            "✅ Reporte pendiente creado:",
+            id_reporte
+        );
+
+        console.log(
+            "📄 Tipo de reporte: NULL"
+        );
+
+
+        // ======================================
+        // 4. CONSULTAR RESULTADO COMPLETO
         // ======================================
 
         const [registro] = await conmysql.query(
@@ -267,13 +330,32 @@ export const registrarCaptura = async (req, res) => {
 
             WHERE c.id_captura = ?`,
 
-            [captura.insertId]
+            [
+                id_captura
+            ]
 
         );
 
 
         // ======================================
-        // 4. WEBSOCKET
+        // 5. PREPARAR RESULTADO
+        // ======================================
+
+        const resultadoCompleto = {
+
+            ...registro[0],
+
+            id_reporte:
+                id_reporte,
+
+            id_tipo_reporte:
+                null
+
+        };
+
+
+        // ======================================
+        // 6. WEBSOCKET
         // ======================================
 
         const io = getIO();
@@ -283,22 +365,30 @@ export const registrarCaptura = async (req, res) => {
 
             io.emit(
                 "nuevaCaptura",
-                registro[0]
+                resultadoCompleto
             );
 
         }
 
 
         // ======================================
-        // 5. RESPUESTA
+        // 7. RESPUESTA
         // ======================================
+
+        console.log(
+            "=========================================="
+        );
 
         console.log(
             "📤 CAPTURA REGISTRADA:"
         );
 
         console.log(
-            registro[0]
+            resultadoCompleto
+        );
+
+        console.log(
+            "=========================================="
         );
 
 
@@ -310,7 +400,7 @@ export const registrarCaptura = async (req, res) => {
                 "Captura registrada correctamente",
 
             data:
-                registro[0]
+                resultadoCompleto
 
         });
 
