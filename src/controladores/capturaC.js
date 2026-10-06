@@ -8,6 +8,13 @@ import { getIO } from "../websocket/socket.js";
 
 export const registrarCaptura = async (req, res) => {
 
+    // ======================================
+    // CONEXIÓN PARA TRANSACCIÓN
+    // ======================================
+
+    let connection = null;
+
+
     try {
 
         // ======================================
@@ -61,14 +68,90 @@ export const registrarCaptura = async (req, res) => {
 
 
         // ======================================
-        // PREPARAR PORCENTAJE
+        // CONVERTIR VALORES
         // ======================================
+
+        const idEspecieFinal =
+            Number(id_especie);
+
+        const idUsuarioFinal =
+            Number(id_usuario);
+
+        const pesoFinal =
+            Number(peso);
 
         const porcentajeFinal =
             porcentaje != null
                 ? Number(porcentaje)
                 : 0;
 
+
+        // ======================================
+        // VALIDAR ID ESPECIE
+        // ======================================
+
+        if (
+            !Number.isInteger(idEspecieFinal) ||
+            idEspecieFinal <= 0
+        ) {
+
+            return res.status(400).json({
+
+                estado: 0,
+
+                mensaje:
+                    "El id_especie no es válido"
+
+            });
+
+        }
+
+
+        // ======================================
+        // VALIDAR ID USUARIO
+        // ======================================
+
+        if (
+            !Number.isInteger(idUsuarioFinal) ||
+            idUsuarioFinal <= 0
+        ) {
+
+            return res.status(400).json({
+
+                estado: 0,
+
+                mensaje:
+                    "El id_usuario no es válido"
+
+            });
+
+        }
+
+
+        // ======================================
+        // VALIDAR PESO
+        // ======================================
+
+        if (
+            !Number.isFinite(pesoFinal) ||
+            pesoFinal <= 0
+        ) {
+
+            return res.status(400).json({
+
+                estado: 0,
+
+                mensaje:
+                    "El peso debe ser mayor a 0"
+
+            });
+
+        }
+
+
+        // ======================================
+        // VALIDAR PORCENTAJE
+        // ======================================
 
         if (
             !Number.isFinite(porcentajeFinal) ||
@@ -95,37 +178,151 @@ export const registrarCaptura = async (req, res) => {
 
 
         // ======================================
-        // 1. CREAR DETECCIÓN
+        // OBTENER CONEXIÓN
         // ======================================
 
-        const [deteccion] = await conmysql.query(
+        connection =
+            await conmysql.getConnection();
 
-            `INSERT INTO detecciones
-            (
-                id_especie,
-                imagen_url,
-                porcentaje,
-                fecha_hora
-            )
-            VALUES
-            (
-                ?,
-                ?,
-                ?,
-                CONVERT_TZ(
-                    UTC_TIMESTAMP(),
-                    '+00:00',
-                    '-05:00'
-                )
-            )`,
 
-            [
-                id_especie,
-                imagen_url || null,
-                porcentajeFinal
-            ]
+        // ======================================
+        // INICIAR TRANSACCIÓN
+        // ======================================
 
+        await connection.beginTransaction();
+
+
+        console.log(
+            "🔄 Transacción iniciada"
         );
+
+
+        // ======================================
+        // 1. VALIDAR ESPECIE
+        // ======================================
+
+        const [especies] =
+            await connection.query(
+
+                `SELECT
+                    id_especie,
+                    nombre_comun,
+                    nombre_cientifico
+                 FROM especies
+                 WHERE id_especie = ?
+                 LIMIT 1`,
+
+                [
+                    idEspecieFinal
+                ]
+
+            );
+
+
+        if (
+            !especies ||
+            especies.length === 0
+        ) {
+
+            await connection.rollback();
+
+            connection.release();
+
+            connection = null;
+
+
+            return res.status(404).json({
+
+                estado: 0,
+
+                mensaje:
+                    "La especie indicada no existe"
+
+            });
+
+        }
+
+
+        // ======================================
+        // 2. VALIDAR USUARIO
+        // ======================================
+
+        const [usuarios] =
+            await connection.query(
+
+                `SELECT
+                    id_usuario,
+                    nombre,
+                    apellido,
+                    id_rol
+                 FROM usuarios
+                 WHERE id_usuario = ?
+                 LIMIT 1`,
+
+                [
+                    idUsuarioFinal
+                ]
+
+            );
+
+
+        if (
+            !usuarios ||
+            usuarios.length === 0
+        ) {
+
+            await connection.rollback();
+
+            connection.release();
+
+            connection = null;
+
+
+            return res.status(404).json({
+
+                estado: 0,
+
+                mensaje:
+                    "El usuario indicado no existe"
+
+            });
+
+        }
+
+
+        // ======================================
+        // 3. CREAR DETECCIÓN
+        // ======================================
+
+        const [deteccion] =
+            await connection.query(
+
+                `INSERT INTO detecciones
+                (
+                    id_especie,
+                    imagen_url,
+                    porcentaje,
+                    fecha_hora
+                )
+                VALUES
+                (
+                    ?,
+                    ?,
+                    ?,
+                    CONVERT_TZ(
+                        UTC_TIMESTAMP(),
+                        '+00:00',
+                        '-05:00'
+                    )
+                )`,
+
+                [
+                    idEspecieFinal,
+                    imagen_url || null,
+                    porcentajeFinal
+                ]
+
+            );
 
 
         const id_deteccion =
@@ -139,39 +336,40 @@ export const registrarCaptura = async (req, res) => {
 
 
         // ======================================
-        // 2. CREAR CAPTURA
+        // 4. CREAR CAPTURA
         // ======================================
 
-        const [captura] = await conmysql.query(
+        const [captura] =
+            await connection.query(
 
-            `INSERT INTO capturas
-            (
-                id_deteccion,
-                id_usuario,
-                peso,
-                fecha_hora,
-                estado
-            )
-            VALUES
-            (
-                ?,
-                ?,
-                ?,
-                CONVERT_TZ(
-                    UTC_TIMESTAMP(),
-                    '+00:00',
-                    '-05:00'
-                ),
-                1
-            )`,
+                `INSERT INTO capturas
+                (
+                    id_deteccion,
+                    id_usuario,
+                    peso,
+                    fecha_hora,
+                    estado
+                )
+                VALUES
+                (
+                    ?,
+                    ?,
+                    ?,
+                    CONVERT_TZ(
+                        UTC_TIMESTAMP(),
+                        '+00:00',
+                        '-05:00'
+                    ),
+                    1
+                )`,
 
-            [
-                id_deteccion,
-                id_usuario,
-                peso
-            ]
+                [
+                    id_deteccion,
+                    idUsuarioFinal,
+                    pesoFinal
+                ]
 
-        );
+            );
 
 
         const id_captura =
@@ -185,58 +383,61 @@ export const registrarCaptura = async (req, res) => {
 
 
         // ======================================
-        // 3. CREAR REPORTE PENDIENTE
+        // 5. CREAR REPORTE PENDIENTE
         // ======================================
         //
         // Cada captura genera automáticamente
-        // un registro en reportes.
+        // un reporte pendiente.
         //
-        // El reporte queda relacionado con:
+        // id_tipo_reporte = NULL
+        // titulo          = NULL
+        // archivo_pdf     = 0
+        // archivo_csv     = 0
         //
-        // - id_captura
-        // - id_usuario
+        // PDF:
+        // 0 = No generado
+        // 1 = Generado
         //
-        // Todavía NO se define:
+        // CSV:
+        // 0 = No generado
+        // 1 = Generado
         //
-        // - id_tipo_reporte
-        // - titulo
-        // - archivo_pdf
-        //
-        // Estos datos se completarán después
-        // desde el módulo de reportes.
         // ======================================
 
-        const [reporte] = await conmysql.query(
+        const [reporte] =
+            await connection.query(
 
-            `INSERT INTO reportes
-            (
-                id_captura,
-                id_usuario,
-                id_tipo_reporte,
-                titulo,
-                archivo_pdf,
-                fecha_generacion
-            )
-            VALUES
-            (
-                ?,
-                ?,
-                NULL,
-                NULL,
-                NULL,
-                CONVERT_TZ(
-                    UTC_TIMESTAMP(),
-                    '+00:00',
-                    '-05:00'
+                `INSERT INTO reportes
+                (
+                    id_captura,
+                    id_usuario,
+                    id_tipo_reporte,
+                    titulo,
+                    archivo_pdf,
+                    archivo_csv,
+                    fecha_generacion
                 )
-            )`,
+                VALUES
+                (
+                    ?,
+                    ?,
+                    NULL,
+                    NULL,
+                    0,
+                    0,
+                    CONVERT_TZ(
+                        UTC_TIMESTAMP(),
+                        '+00:00',
+                        '-05:00'
+                    )
+                )`,
 
-            [
-                id_captura,
-                id_usuario
-            ]
+                [
+                    id_captura,
+                    idUsuarioFinal
+                ]
 
-        );
+            );
 
 
         const id_reporte =
@@ -257,121 +458,166 @@ export const registrarCaptura = async (req, res) => {
             "📋 Tipo de reporte: NULL"
         );
 
+        console.log(
+            "📝 Título: NULL"
+        );
 
-        // ======================================
-        // 4. CONSULTAR RESULTADO COMPLETO
-        // ======================================
+        console.log(
+            "📄 PDF generado: NO"
+        );
 
-        const [registro] = await conmysql.query(
-
-            `SELECT
-
-                -- CAPTURA
-
-                c.id_captura,
-                c.peso,
-
-                DATE_FORMAT(
-                    c.fecha_hora,
-                    '%Y-%m-%d'
-                ) AS fecha,
-
-                DATE_FORMAT(
-                    c.fecha_hora,
-                    '%H:%i:%s'
-                ) AS hora,
-
-                DATE_FORMAT(
-                    c.fecha_hora,
-                    '%Y-%m-%d %H:%i:%s'
-                ) AS fecha_hora,
-
-
-                -- DETECCIÓN
-
-                d.id_deteccion,
-                d.id_especie,
-                d.imagen_url,
-                d.porcentaje,
-
-
-                -- ESPECIE
-
-                e.nombre_comun AS especie,
-                e.nombre_cientifico,
-
-
-                -- USUARIO
-
-                u.id_usuario,
-                u.nombre,
-                u.apellido,
-
-                CONCAT(
-                    u.nombre,
-                    ' ',
-                    u.apellido
-                ) AS nombre_completo,
-
-
-                -- ROL
-
-                r.id_rol,
-                r.nombre_rol,
-
-
-                -- REPORTE
-
-                rep.id_reporte,
-                rep.id_tipo_reporte,
-                rep.titulo,
-                rep.archivo_pdf,
-
-                DATE_FORMAT(
-                    rep.fecha_generacion,
-                    '%Y-%m-%d %H:%i:%s'
-                ) AS fecha_generacion
-
-
-            FROM capturas c
-
-
-            INNER JOIN detecciones d
-                ON c.id_deteccion =
-                   d.id_deteccion
-
-
-            INNER JOIN especies e
-                ON d.id_especie =
-                   e.id_especie
-
-
-            INNER JOIN usuarios u
-                ON c.id_usuario =
-                   u.id_usuario
-
-
-            INNER JOIN roles r
-                ON u.id_rol =
-                   r.id_rol
-
-
-            LEFT JOIN reportes rep
-                ON c.id_captura =
-                   rep.id_captura
-
-
-            WHERE c.id_captura = ?`,
-
-            [
-                id_captura
-            ]
-
+        console.log(
+            "📊 CSV generado: NO"
         );
 
 
         // ======================================
-        // 5. VALIDAR RESULTADO
+        // 6. CONSULTAR RESULTADO COMPLETO
+        // ======================================
+
+        const [registro] =
+            await connection.query(
+
+                `SELECT
+
+                    -- =========================
+                    -- CAPTURA
+                    -- =========================
+
+                    c.id_captura,
+                    c.peso,
+                    c.estado,
+
+                    DATE_FORMAT(
+                        c.fecha_hora,
+                        '%Y-%m-%d'
+                    ) AS fecha,
+
+                    DATE_FORMAT(
+                        c.fecha_hora,
+                        '%H:%i:%s'
+                    ) AS hora,
+
+                    DATE_FORMAT(
+                        c.fecha_hora,
+                        '%Y-%m-%d %H:%i:%s'
+                    ) AS fecha_hora,
+
+
+                    -- =========================
+                    -- DETECCIÓN
+                    -- =========================
+
+                    d.id_deteccion,
+                    d.id_especie,
+                    d.imagen_url,
+                    d.porcentaje,
+
+
+                    -- =========================
+                    -- ESPECIE
+                    -- =========================
+
+                    e.nombre_comun
+                        AS especie,
+
+                    e.nombre_cientifico,
+
+
+                    -- =========================
+                    -- USUARIO
+                    -- =========================
+
+                    u.id_usuario,
+                    u.nombre,
+                    u.apellido,
+
+                    CONCAT(
+                        u.nombre,
+                        ' ',
+                        u.apellido
+                    ) AS nombre_completo,
+
+
+                    -- =========================
+                    -- ROL
+                    -- =========================
+
+                    r.id_rol,
+                    r.nombre_rol,
+
+
+                    -- =========================
+                    -- REPORTE
+                    -- =========================
+
+                    rep.id_reporte,
+
+                    rep.id_tipo_reporte,
+
+                    rep.titulo,
+
+                    rep.archivo_pdf,
+
+                    rep.archivo_csv,
+
+                    DATE_FORMAT(
+                        rep.fecha_generacion,
+                        '%Y-%m-%d'
+                    ) AS fecha_reporte,
+
+                    DATE_FORMAT(
+                        rep.fecha_generacion,
+                        '%H:%i:%s'
+                    ) AS hora_reporte,
+
+                    DATE_FORMAT(
+                        rep.fecha_generacion,
+                        '%Y-%m-%d %H:%i:%s'
+                    ) AS fecha_generacion
+
+
+                FROM capturas c
+
+
+                INNER JOIN detecciones d
+                    ON c.id_deteccion =
+                       d.id_deteccion
+
+
+                INNER JOIN especies e
+                    ON d.id_especie =
+                       e.id_especie
+
+
+                INNER JOIN usuarios u
+                    ON c.id_usuario =
+                       u.id_usuario
+
+
+                INNER JOIN roles r
+                    ON u.id_rol =
+                       r.id_rol
+
+
+                LEFT JOIN reportes rep
+                    ON c.id_captura =
+                       rep.id_captura
+
+
+                WHERE c.id_captura = ?
+
+                LIMIT 1`,
+
+                [
+                    id_captura
+                ]
+
+            );
+
+
+        // ======================================
+        // 7. VALIDAR RESULTADO
         // ======================================
 
         if (
@@ -379,37 +625,77 @@ export const registrarCaptura = async (req, res) => {
             registro.length === 0
         ) {
 
-            return res.status(500).json({
-
-                estado: 0,
-
-                mensaje:
-                    "La captura fue registrada, pero no se pudo consultar el resultado"
-
-            });
-
-        }
-
-
-        // ======================================
-        // 6. WEBSOCKET
-        // ======================================
-
-        const io = getIO();
-
-
-        if (io) {
-
-            io.emit(
-                "nuevaCaptura",
-                registro[0]
+            throw new Error(
+                "La captura fue creada, pero no se pudo consultar el resultado completo"
             );
 
         }
 
 
         // ======================================
-        // 7. MOSTRAR RESULTADO
+        // 8. CONFIRMAR TRANSACCIÓN
+        // ======================================
+
+        await connection.commit();
+
+
+        console.log(
+            "✅ Transacción confirmada"
+        );
+
+
+        // ======================================
+        // LIBERAR CONEXIÓN
+        // ======================================
+
+        connection.release();
+
+        connection = null;
+
+
+        // ======================================
+        // 9. WEBSOCKET
+        // ======================================
+
+        try {
+
+            const io = getIO();
+
+
+            if (io) {
+
+                io.emit(
+                    "nuevaCaptura",
+                    registro[0]
+                );
+
+
+                console.log(
+                    "📡 Evento nuevaCaptura enviado"
+                );
+
+            }
+
+        }
+
+        catch (socketError) {
+
+            /*
+             * Un error del WebSocket NO debe
+             * deshacer una captura que ya fue
+             * guardada correctamente.
+             */
+
+            console.error(
+                "⚠️ Error enviando WebSocket:",
+                socketError
+            );
+
+        }
+
+
+        // ======================================
+        // 10. MOSTRAR RESULTADO
         // ======================================
 
         console.log(
@@ -430,10 +716,10 @@ export const registrarCaptura = async (req, res) => {
 
 
         // ======================================
-        // 8. RESPUESTA
+        // 11. RESPUESTA
         // ======================================
 
-        res.status(201).json({
+        return res.status(201).json({
 
             estado: 1,
 
@@ -449,18 +735,78 @@ export const registrarCaptura = async (req, res) => {
 
     catch (error) {
 
+        // ======================================
+        // ROLLBACK
+        // ======================================
+
+        if (connection) {
+
+            try {
+
+                await connection.rollback();
+
+
+                console.log(
+                    "↩️ Transacción revertida"
+                );
+
+            }
+
+            catch (rollbackError) {
+
+                console.error(
+                    "❌ Error realizando rollback:",
+                    rollbackError
+                );
+
+            }
+
+
+            // ==================================
+            // LIBERAR CONEXIÓN
+            // ==================================
+
+            try {
+
+                connection.release();
+
+            }
+
+            catch (releaseError) {
+
+                console.error(
+                    "❌ Error liberando conexión:",
+                    releaseError
+                );
+
+            }
+
+
+            connection = null;
+
+        }
+
+
+        // ======================================
+        // MOSTRAR ERROR
+        // ======================================
+
         console.error(
             "❌ Error registrarCaptura:",
             error
         );
 
 
-        res.status(500).json({
+        // ======================================
+        // RESPUESTA
+        // ======================================
+
+        return res.status(500).json({
 
             estado: 0,
 
             mensaje:
-                "Error del servidor",
+                "Error del servidor al registrar la captura",
 
             error:
                 error.message
