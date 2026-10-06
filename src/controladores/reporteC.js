@@ -3414,3 +3414,155 @@ export const getEspeciesFiltro = async (req, res) => {
         });
     }
 };
+
+// ======================================================
+// DETALLE DE UN REPORTE DEL HISTORIAL
+// ======================================================
+export const getDetalleReporte = async (req, res) => {
+    try {
+        const { id_usuario, id_especie, id_tipo_reporte, titulo, fecha } = req.query;
+
+        const idUsuario = Number(id_usuario);
+        const idEspecie = Number(id_especie);
+        const idTipo = Number(id_tipo_reporte);
+
+        if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
+            return res.status(400).json({ estado: 0, mensaje: "Usuario no válido" });
+        }
+
+        if (!Number.isInteger(idEspecie) || idEspecie <= 0) {
+            return res.status(400).json({ estado: 0, mensaje: "Especie no válida" });
+        }
+
+        if (!Number.isInteger(idTipo) || idTipo <= 0) {
+            return res.status(400).json({ estado: 0, mensaje: "Tipo de reporte no válido" });
+        }
+
+        if (!titulo?.trim() || !fecha) {
+            return res.status(400).json({ estado: 0, mensaje: "Faltan datos para identificar el reporte" });
+        }
+
+        const [filas] = await conmysql.query(`
+            SELECT
+                rep.id_reporte,
+                rep.titulo,
+                rep.id_tipo_reporte,
+                tr.nombre_tipo,
+                rep.fecha_generacion,
+
+                c.id_captura,
+                c.peso,
+                c.fecha_hora AS fecha_captura,
+
+                d.id_deteccion,
+                d.id_especie,
+                d.porcentaje,
+                d.imagen_url,
+
+                e.nombre_comun AS especie,
+                e.nombre_cientifico,
+
+                u.id_usuario,
+                u.nombre,
+                u.apellido
+
+            FROM reportes rep
+
+            INNER JOIN capturas c
+                ON rep.id_captura = c.id_captura
+
+            INNER JOIN detecciones d
+                ON c.id_deteccion = d.id_deteccion
+
+            INNER JOIN especies e
+                ON d.id_especie = e.id_especie
+
+            INNER JOIN tipos_reporte tr
+                ON rep.id_tipo_reporte = tr.id_tipo_reporte
+
+            INNER JOIN usuarios u
+                ON rep.id_usuario = u.id_usuario
+
+            WHERE rep.id_usuario = ?
+              AND d.id_especie = ?
+              AND rep.id_tipo_reporte = ?
+              AND rep.titulo = ?
+              AND DATE(rep.fecha_generacion) = ?
+              AND rep.archivo_pdf = 1
+              AND rep.archivo_csv = 1
+              AND c.estado = 1
+
+            ORDER BY c.fecha_hora ASC
+        `, [
+            idUsuario,
+            idEspecie,
+            idTipo,
+            titulo.trim(),
+            fecha
+        ]);
+
+        if (!filas.length) {
+            return res.status(404).json({
+                estado: 0,
+                mensaje: "No se encontró el reporte"
+            });
+        }
+
+        const primero = filas[0];
+
+        const capturas = filas.map(fila => ({
+            id_reporte: fila.id_reporte,
+            id_captura: fila.id_captura,
+            id_deteccion: fila.id_deteccion,
+            peso: Number(fila.peso || 0),
+            porcentaje: Number(fila.porcentaje || 0),
+            imagen_url: fila.imagen_url,
+            fecha_hora: fila.fecha_captura
+        }));
+
+        const pesoTotal = capturas.reduce(
+            (total, captura) => total + captura.peso,
+            0
+        );
+
+        const confianzaPromedio = capturas.length
+            ? capturas.reduce(
+                (total, captura) => total + captura.porcentaje,
+                0
+              ) / capturas.length
+            : 0;
+
+        return res.status(200).json({
+            estado: 1,
+            mensaje: "Detalle obtenido correctamente",
+            data: {
+                titulo: primero.titulo,
+                id_tipo_reporte: primero.id_tipo_reporte,
+                nombre_tipo: primero.nombre_tipo,
+                fecha: fecha,
+
+                id_especie: primero.id_especie,
+                especie: primero.especie,
+                nombre_cientifico: primero.nombre_cientifico,
+
+                id_usuario: primero.id_usuario,
+                nombre: primero.nombre,
+                apellido: primero.apellido,
+
+                total_capturas: capturas.length,
+                peso_total: Number(pesoTotal.toFixed(2)),
+                confianza_promedio: Number(confianzaPromedio.toFixed(2)),
+
+                capturas
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error getDetalleReporte:", error);
+
+        return res.status(500).json({
+            estado: 0,
+            mensaje: "Error al obtener el detalle del reporte"
+        });
+    }
+};

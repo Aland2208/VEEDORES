@@ -1,6 +1,7 @@
 import { Router } from "express";
 
-import { getReporteCapturas, getReportePorFechas, getResumenEspecies, getTiposReporte, getReportesPendientesHoy, generarPDFEspecie, generarCSVEspecie, enviarReporteEspecie, getHistorialReportes, getEspeciesFiltro
+import { getReporteCapturas, getReportePorFechas, getResumenEspecies, getTiposReporte, getReportesPendientesHoy, 
+    generarPDFEspecie, generarCSVEspecie, enviarReporteEspecie, getHistorialReportes, getEspeciesFiltro, getDetalleReporte
 } from "../controladores/reporteC.js";
 
 
@@ -41,5 +42,6 @@ router.post("/generar-csv-especie", generarCSVEspecie);
 router.patch("/enviar-especie", enviarReporteEspecie);
 router.get("/historial", getHistorialReportes);
 router.get("/filtros/especies", getEspeciesFiltro);
+router.get("/historial/detalle", getDetalleReporte);
 
 export default router;
