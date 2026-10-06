@@ -11,7 +11,7 @@ export const getDashboardVeedor = async (req, res) => {
             });
         }
 
-        // RESUMEN GENERAL DEL DÍA
+        // RESUMEN GENERAL
         const [resumen] = await conmysql.query(`
             SELECT
                 COUNT(c.id_captura) AS total_capturas,
@@ -52,6 +52,21 @@ export const getDashboardVeedor = async (req, res) => {
             ORDER BY total_capturas DESC
         `, [idUsuario]);
 
+        // ACTIVIDAD POR HORA
+        const [actividad] = await conmysql.query(`
+            SELECT
+                HOUR(c.fecha_hora) AS hora,
+                COUNT(c.id_captura) AS total_capturas,
+                COALESCE(SUM(c.peso), 0) AS peso_total
+            FROM capturas c
+            WHERE c.id_usuario = ?
+              AND c.estado = 1
+              AND c.fecha_hora >= CURDATE()
+              AND c.fecha_hora < CURDATE() + INTERVAL 1 DAY
+            GROUP BY HOUR(c.fecha_hora)
+            ORDER BY hora ASC
+        `, [idUsuario]);
+
         return res.status(200).json({
             estado: 1,
             mensaje: 'Dashboard obtenido correctamente',
@@ -62,11 +77,18 @@ export const getDashboardVeedor = async (req, res) => {
                     confianza_promedio: Number(resumen[0]?.confianza_promedio || 0),
                     total_especies: Number(resumen[0]?.total_especies || 0)
                 },
-                especies: especies.map(especie => ({
-                    ...especie,
-                    total_capturas: Number(especie.total_capturas || 0),
-                    peso_total: Number(especie.peso_total || 0),
-                    confianza_promedio: Number(especie.confianza_promedio || 0)
+                especies: especies.map(item => ({
+                    id_especie: item.id_especie,
+                    nombre_comun: item.nombre_comun,
+                    nombre_cientifico: item.nombre_cientifico,
+                    total_capturas: Number(item.total_capturas || 0),
+                    peso_total: Number(item.peso_total || 0),
+                    confianza_promedio: Number(item.confianza_promedio || 0)
+                })),
+                actividad: actividad.map(item => ({
+                    hora: Number(item.hora),
+                    total_capturas: Number(item.total_capturas || 0),
+                    peso_total: Number(item.peso_total || 0)
                 }))
             }
         });
