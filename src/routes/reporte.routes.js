@@ -5,7 +5,9 @@ import {
     getReportePorFechas,
     getResumenEspecies,
     getTiposReporte,
-    getReportesPendientesHoy
+    getReportesPendientesHoy,
+    generarPDFEspecie,
+    generarCSVEspecie
 
 } from "../controladores/reporteC.js";
 
@@ -40,6 +42,16 @@ router.get(
 router.get(
     "/especies/:id_usuario",
     getResumenEspecies
+);
+
+router.post(
+    "/generar-pdf-especie",
+    generarPDFEspecie
+);
+
+router.post(
+    "/generar-csv-especie",
+    generarCSVEspecie
 );
 
 
