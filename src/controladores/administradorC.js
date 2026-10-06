@@ -1,5 +1,51 @@
 import { conmysql } from '../db.js';
 
+/* BUSCAR ADMINISTRADOR POR CORREO */
+export const buscarAdministradorPorCorreo=async(req,res)=>{
+    try{
+        let correo=String(req.query.correo||'').trim().toLowerCase();
+
+        if(!correo){
+            return res.status(400).json({
+                estado:0,
+                mensaje:'El correo electrónico es obligatorio.'
+            });
+        }
+
+        const [administradores]=await conmysql.query(`
+            SELECT
+                id_usuario,
+                nombre,
+                apellido,
+                correo
+            FROM usuarios
+            WHERE LOWER(correo)=?
+              AND id_rol=1
+              AND estado=1
+            LIMIT 1
+        `,[correo]);
+
+        if(administradores.length===0){
+            return res.status(404).json({
+                estado:0,
+                mensaje:'No se encontró un administrador con este correo.'
+            });
+        }
+
+        return res.status(200).json({
+            estado:1,
+            mensaje:'Administrador encontrado.',
+            data:administradores[0]
+        });
+    }catch(error){
+        console.error('❌ Error buscarAdministradorPorCorreo:',error);
+        return res.status(500).json({
+            estado:0,
+            mensaje:'Error al buscar el administrador.'
+        });
+    }
+};
+
 /* OBTENER OBSERVADORES ACTUALES DE UN ADMINISTRADOR */
 export const getUsuariosAdministrador=async(req,res)=>{
     try{
