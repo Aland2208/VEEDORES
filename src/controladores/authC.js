@@ -342,3 +342,93 @@ export const actualizarPerfil = async (req, res) => {
         });
     }
 };
+
+export const cambiarPassword=async(req,res)=>{
+    try{
+        const idUsuario=Number(req.params.id_usuario);
+        const {passwordActual,nuevaPassword}=req.body;
+
+        if(!Number.isInteger(idUsuario)||idUsuario<=0){
+            return res.status(400).json({
+                estado:0,
+                mensaje:'Usuario no válido.'
+            });
+        }
+
+        if(!passwordActual||!nuevaPassword){
+            return res.status(400).json({
+                estado:0,
+                mensaje:'La contraseña actual y la nueva contraseña son obligatorias.'
+            });
+        }
+
+        if(nuevaPassword.length<8){
+            return res.status(400).json({
+                estado:0,
+                mensaje:'La nueva contraseña debe tener al menos 8 caracteres.'
+            });
+        }
+
+        const [usuarios]=await conmysql.query(`
+            SELECT id_usuario,password_hash
+            FROM usuarios
+            WHERE id_usuario=? AND estado=1
+            LIMIT 1
+        `,[idUsuario]);
+
+        if(usuarios.length===0){
+            return res.status(404).json({
+                estado:0,
+                mensaje:'Usuario no encontrado.'
+            });
+        }
+
+        const usuario=usuarios[0];
+
+        const passwordCorrecta=await bcrypt.compare(
+            passwordActual,
+            usuario.password_hash
+        );
+
+        if(!passwordCorrecta){
+            return res.status(400).json({
+                estado:0,
+                mensaje:'La contraseña actual es incorrecta.'
+            });
+        }
+
+        const mismaPassword=await bcrypt.compare(
+            nuevaPassword,
+            usuario.password_hash
+        );
+
+        if(mismaPassword){
+            return res.status(400).json({
+                estado:0,
+                mensaje:'La nueva contraseña debe ser diferente a la contraseña actual.'
+            });
+        }
+
+        const salt=await bcrypt.genSalt(10);
+        const nuevoHash=await bcrypt.hash(nuevaPassword,salt);
+
+        await conmysql.query(`
+            UPDATE usuarios
+            SET password_hash=?
+            WHERE id_usuario=?
+        `,[nuevoHash,idUsuario]);
+
+        return res.status(200).json({
+            estado:1,
+            mensaje:'Contraseña actualizada correctamente.'
+        });
+
+    }catch(error){
+        console.error('❌ Error cambiarPassword:',error);
+
+        return res.status(500).json({
+            estado:0,
+            mensaje:'Error del servidor al cambiar la contraseña.'
+        });
+    }
+};

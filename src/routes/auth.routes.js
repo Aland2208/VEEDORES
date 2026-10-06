@@ -5,7 +5,8 @@ import {
     solicitarRecuperacion,
     restablecerPassword,
     obtenerPerfil,
-    actualizarPerfil
+    actualizarPerfil,
+    cambiarPassword
 } from "../controladores/authC.js";
 
 const router = Router();
@@ -17,5 +18,6 @@ router.post("/restablecer", restablecerPassword);
 
 router.get("/perfil/:id_usuario", obtenerPerfil);
 router.patch("/perfil/:id_usuario", actualizarPerfil);
+router.patch('/cambiar-password/:id_usuario',cambiarPassword);
 
 export default router;
