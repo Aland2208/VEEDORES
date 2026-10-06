@@ -3026,3 +3026,187 @@ export const generarCSVEspecie = async (
     }
 
 };
+
+// ======================================================
+// ENVIAR / FINALIZAR REPORTE POR ESPECIE
+// ======================================================
+
+export const enviarReporteEspecie = async (req, res) => {
+    let conexion;
+
+    try {
+        const { id_usuario, id_especie, ids_reportes, id_tipo_reporte, titulo } = req.body;
+
+        console.log("==========================================");
+        console.log("📤 ENVIANDO REPORTE POR ESPECIE");
+        console.log("👤 Usuario:", id_usuario);
+        console.log("🐟 Especie:", id_especie);
+        console.log("📋 Reportes:", ids_reportes);
+
+        // Validaciones básicas
+        const idUsuario = Number(id_usuario);
+        const idEspecie = Number(id_especie);
+        const idTipo = Number(id_tipo_reporte);
+        const tituloLimpio = String(titulo || "").trim();
+
+        if (!Number.isInteger(idUsuario) || idUsuario <= 0)
+            return res.status(400).json({ estado: 0, mensaje: "Usuario no válido" });
+
+        if (!Number.isInteger(idEspecie) || idEspecie <= 0)
+            return res.status(400).json({ estado: 0, mensaje: "Especie no válida" });
+
+        if (!Number.isInteger(idTipo) || idTipo <= 0)
+            return res.status(400).json({ estado: 0, mensaje: "Seleccione un tipo de reporte" });
+
+        if (!tituloLimpio)
+            return res.status(400).json({ estado: 0, mensaje: "Ingrese un título para el reporte" });
+
+        if (tituloLimpio.length > 255)
+            return res.status(400).json({ estado: 0, mensaje: "El título no puede superar 255 caracteres" });
+
+        if (!Array.isArray(ids_reportes) || ids_reportes.length === 0)
+            return res.status(400).json({ estado: 0, mensaje: "No existen reportes para enviar" });
+
+        // Normalizar IDs y eliminar repetidos
+        const ids = [...new Set(
+            ids_reportes
+                .map(Number)
+                .filter(id => Number.isInteger(id) && id > 0)
+        )];
+
+        if (ids.length === 0)
+            return res.status(400).json({ estado: 0, mensaje: "Los IDs de reportes no son válidos" });
+
+        conexion = await conmysql.getConnection();
+        await conexion.beginTransaction();
+
+        // Verificar tipo de reporte
+        const [tipos] = await conexion.query(`
+            SELECT id_tipo_reporte, nombre_tipo
+            FROM tipos_reporte
+            WHERE id_tipo_reporte = ?
+            LIMIT 1
+        `, [idTipo]);
+
+        if (tipos.length === 0) {
+            await conexion.rollback();
+            return res.status(400).json({ estado: 0, mensaje: "El tipo de reporte no existe" });
+        }
+
+        const placeholders = ids.map(() => "?").join(",");
+
+        // Obtener y bloquear los reportes antes de modificarlos
+        const [reportes] = await conexion.query(`
+            SELECT rep.id_reporte, rep.id_captura, rep.id_usuario,
+                   rep.id_tipo_reporte, rep.archivo_pdf, rep.archivo_csv,
+                   c.estado, d.id_especie, e.nombre_comun AS especie
+            FROM reportes rep
+            INNER JOIN capturas c ON rep.id_captura = c.id_captura
+            INNER JOIN detecciones d ON c.id_deteccion = d.id_deteccion
+            INNER JOIN especies e ON d.id_especie = e.id_especie
+            WHERE rep.id_usuario = ?
+              AND d.id_especie = ?
+              AND rep.id_reporte IN (${placeholders})
+            FOR UPDATE
+        `, [idUsuario, idEspecie, ...ids]);
+
+        if (reportes.length !== ids.length) {
+            await conexion.rollback();
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Uno o más reportes no pertenecen al usuario o a la especie seleccionada"
+            });
+        }
+
+        // No permitir volver a enviar un reporte finalizado
+        if (reportes.some(r => r.id_tipo_reporte !== null)) {
+            await conexion.rollback();
+            return res.status(409).json({
+                estado: 0,
+                mensaje: "Uno o más reportes ya fueron enviados anteriormente"
+            });
+        }
+
+        // Todas las capturas deben continuar activas
+        if (reportes.some(r => Number(r.estado) !== 1)) {
+            await conexion.rollback();
+            return res.status(409).json({
+                estado: 0,
+                mensaje: "Una o más capturas ya no se encuentran activas"
+            });
+        }
+
+        // Validar archivos desde BD, no solamente desde Angular
+        if (reportes.some(r => Number(r.archivo_pdf) !== 1)) {
+            await conexion.rollback();
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Debe generar el PDF antes de enviar el reporte"
+            });
+        }
+
+        if (reportes.some(r => Number(r.archivo_csv) !== 1)) {
+            await conexion.rollback();
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Debe generar el CSV antes de enviar el reporte"
+            });
+        }
+
+        // Finalizar todos los registros del grupo
+        const [resultado] = await conexion.query(`
+            UPDATE reportes
+            SET id_tipo_reporte = ?, titulo = ?
+            WHERE id_usuario = ?
+              AND id_tipo_reporte IS NULL
+              AND archivo_pdf = 1
+              AND archivo_csv = 1
+              AND id_reporte IN (${placeholders})
+        `, [idTipo, tituloLimpio, idUsuario, ...ids]);
+
+        if (resultado.affectedRows !== ids.length) {
+            await conexion.rollback();
+            return res.status(409).json({
+                estado: 0,
+                mensaje: "No se pudieron actualizar todos los reportes"
+            });
+        }
+
+        await conexion.commit();
+
+        console.log("✅ Reporte enviado correctamente");
+        console.log("📋 Registros actualizados:", ids);
+        console.log("📝 Tipo:", tipos[0].nombre_tipo);
+        console.log("📌 Título:", tituloLimpio);
+        console.log("==========================================");
+
+        return res.status(200).json({
+            estado: 1,
+            mensaje: "Reporte enviado correctamente",
+            data: {
+                id_especie: idEspecie,
+                especie: reportes[0].especie,
+                id_tipo_reporte: idTipo,
+                tipo_reporte: tipos[0].nombre_tipo,
+                titulo: tituloLimpio,
+                total_reportes: ids.length,
+                ids_reportes: ids
+            }
+        });
+
+    } catch (error) {
+        if (conexion) {
+            try { await conexion.rollback(); } catch {}
+        }
+
+        console.error("❌ Error enviarReporteEspecie:", error);
+
+        return res.status(500).json({
+            estado: 0,
+            mensaje: "Error interno al enviar el reporte"
+        });
+
+    } finally {
+        if (conexion) conexion.release();
+    }
+};

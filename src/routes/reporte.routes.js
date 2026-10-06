@@ -7,7 +7,8 @@ import {
     getTiposReporte,
     getReportesPendientesHoy,
     generarPDFEspecie,
-    generarCSVEspecie
+    generarCSVEspecie,
+    enviarReporteEspecie
 
 } from "../controladores/reporteC.js";
 
@@ -49,10 +50,7 @@ router.post(
     generarPDFEspecie
 );
 
-router.post(
-    "/generar-csv-especie",
-    generarCSVEspecie
-);
-
+router.post("/generar-csv-especie", generarCSVEspecie);
+router.patch("/enviar-especie", enviarReporteEspecie);
 
 export default router;
