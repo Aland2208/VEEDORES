@@ -185,24 +185,32 @@ export const registrarCaptura = async (req, res) => {
 
 
         // ======================================
-        // 3. CREAR REGISTRO DE REPORTE PENDIENTE
+        // 3. CREAR REPORTE PENDIENTE
         // ======================================
         //
-        // Cuando se registra la captura:
+        // Cada captura genera automáticamente
+        // un registro en reportes.
         //
-        // id_usuario       = usuario que capturó
-        // id_tipo_reporte  = NULL
-        // titulo           = NULL
-        // archivo_pdf      = NULL
+        // El reporte queda relacionado con:
         //
-        // El tipo de reporte se asignará
-        // posteriormente desde el módulo Reportes.
+        // - id_captura
+        // - id_usuario
+        //
+        // Todavía NO se define:
+        //
+        // - id_tipo_reporte
+        // - titulo
+        // - archivo_pdf
+        //
+        // Estos datos se completarán después
+        // desde el módulo de reportes.
         // ======================================
 
         const [reporte] = await conmysql.query(
 
             `INSERT INTO reportes
             (
+                id_captura,
                 id_usuario,
                 id_tipo_reporte,
                 titulo,
@@ -211,6 +219,7 @@ export const registrarCaptura = async (req, res) => {
             )
             VALUES
             (
+                ?,
                 ?,
                 NULL,
                 NULL,
@@ -223,6 +232,7 @@ export const registrarCaptura = async (req, res) => {
             )`,
 
             [
+                id_captura,
                 id_usuario
             ]
 
@@ -234,12 +244,17 @@ export const registrarCaptura = async (req, res) => {
 
 
         console.log(
-            "✅ Reporte pendiente creado:",
+            "📄 Reporte pendiente creado:",
             id_reporte
         );
 
         console.log(
-            "📄 Tipo de reporte: NULL"
+            "🔗 Asociado a captura:",
+            id_captura
+        );
+
+        console.log(
+            "📋 Tipo de reporte: NULL"
         );
 
 
@@ -302,7 +317,20 @@ export const registrarCaptura = async (req, res) => {
                 -- ROL
 
                 r.id_rol,
-                r.nombre_rol
+                r.nombre_rol,
+
+
+                -- REPORTE
+
+                rep.id_reporte,
+                rep.id_tipo_reporte,
+                rep.titulo,
+                rep.archivo_pdf,
+
+                DATE_FORMAT(
+                    rep.fecha_generacion,
+                    '%Y-%m-%d %H:%i:%s'
+                ) AS fecha_generacion
 
 
             FROM capturas c
@@ -328,6 +356,11 @@ export const registrarCaptura = async (req, res) => {
                    r.id_rol
 
 
+            LEFT JOIN reportes rep
+                ON c.id_captura =
+                   rep.id_captura
+
+
             WHERE c.id_captura = ?`,
 
             [
@@ -338,20 +371,24 @@ export const registrarCaptura = async (req, res) => {
 
 
         // ======================================
-        // 5. PREPARAR RESULTADO
+        // 5. VALIDAR RESULTADO
         // ======================================
 
-        const resultadoCompleto = {
+        if (
+            !registro ||
+            registro.length === 0
+        ) {
 
-            ...registro[0],
+            return res.status(500).json({
 
-            id_reporte:
-                id_reporte,
+                estado: 0,
 
-            id_tipo_reporte:
-                null
+                mensaje:
+                    "La captura fue registrada, pero no se pudo consultar el resultado"
 
-        };
+            });
+
+        }
 
 
         // ======================================
@@ -365,14 +402,14 @@ export const registrarCaptura = async (req, res) => {
 
             io.emit(
                 "nuevaCaptura",
-                resultadoCompleto
+                registro[0]
             );
 
         }
 
 
         // ======================================
-        // 7. RESPUESTA
+        // 7. MOSTRAR RESULTADO
         // ======================================
 
         console.log(
@@ -384,7 +421,7 @@ export const registrarCaptura = async (req, res) => {
         );
 
         console.log(
-            resultadoCompleto
+            registro[0]
         );
 
         console.log(
@@ -392,15 +429,19 @@ export const registrarCaptura = async (req, res) => {
         );
 
 
+        // ======================================
+        // 8. RESPUESTA
+        // ======================================
+
         res.status(201).json({
 
             estado: 1,
 
             mensaje:
-                "Captura registrada correctamente",
+                "Captura y reporte pendiente registrados correctamente",
 
             data:
-                resultadoCompleto
+                registro[0]
 
         });
 
@@ -419,7 +460,10 @@ export const registrarCaptura = async (req, res) => {
             estado: 0,
 
             mensaje:
-                "Error del servidor"
+                "Error del servidor",
+
+            error:
+                error.message
 
         });
 
