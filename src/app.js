@@ -9,7 +9,7 @@ import authRouters from './routes/auth.routes.js'
 import reporteRouters from './routes/reporte.routes.js'
 import dashboardRouters from './routes/dashboard.routes.js';
 import administradorR from './routes/admin.routes.js';
-import usuariosR from './routes/admin.routes.js';
+import usuariosR from './routes/usuario.routes.js';
 
 const app = express();
 
