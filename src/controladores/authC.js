@@ -621,3 +621,54 @@ export const cambiarPassword = async (req, res) => {
         });
     }
 };
+
+// ==========================================
+// VALIDAR TOKEN DE RECUPERACIÓN
+// ==========================================
+export const validarTokenRecuperacion = async (req, res) => {
+    try {
+        const { token } = req.params;
+
+        if (!token) {
+            return res.status(400).json({
+                estado: 0,
+                valido: false,
+                mensaje: "Token no proporcionado."
+            });
+        }
+
+        const ahora = new Date();
+
+        const [usuarios] = await conmysql.query(
+            `SELECT id_usuario
+    FROM usuarios
+    WHERE reset_token=?
+    AND reset_token_expira>?
+    LIMIT 1`,
+            [token, ahora]
+        );
+
+        if (usuarios.length === 0) {
+            return res.status(400).json({
+                estado: 0,
+                valido: false,
+                mensaje: "El enlace de recuperación es inválido, expiró o ya fue utilizado."
+            });
+        }
+
+        return res.status(200).json({
+            estado: 1,
+            valido: true,
+            mensaje: "Token válido."
+        });
+
+    } catch (error) {
+        console.error("❌ Error validarTokenRecuperacion:", error);
+
+        return res.status(500).json({
+            estado: 0,
+            valido: false,
+            mensaje: "Error del servidor al validar el enlace."
+        });
+    }
+};
