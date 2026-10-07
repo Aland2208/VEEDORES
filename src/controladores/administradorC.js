@@ -534,3 +534,317 @@ export const getHistorialUsuario=async(req,res)=>{
         });
     }
 };
+
+// ======================================================
+// HISTORIAL - VEEDORES RELACIONADOS CON ADMINISTRADOR
+// ======================================================
+export const getVeedoresHistorial=async(req,res)=>{
+ try{
+  const idAdministrador=Number(req.params.id_administrador);
+
+  if(!Number.isInteger(idAdministrador)||idAdministrador<=0){
+   return res.status(400).json({
+    estado:0,
+    mensaje:"Administrador no válido"
+   });
+  }
+
+  // VALIDAR ADMINISTRADOR
+  const [administradores]=await conmysql.query(`
+   SELECT id_usuario,nombre,apellido,correo
+   FROM usuarios
+   WHERE id_usuario=? AND id_rol=1
+   LIMIT 1
+  `,[idAdministrador]);
+
+  if(administradores.length===0){
+   return res.status(404).json({
+    estado:0,
+    mensaje:"Administrador no encontrado"
+   });
+  }
+
+  // OBTENER TODOS LOS VEEDORES QUE HAN ESTADO
+  // RELACIONADOS CON ESTE ADMINISTRADOR
+  const [veedores]=await conmysql.query(`
+   SELECT
+    u.id_usuario,
+    u.nombre,
+    u.apellido,
+    u.correo,
+    u.estado,
+
+    COUNT(DISTINCT rep.id_reporte) AS total_reportes,
+
+    COUNT(DISTINCT CASE
+     WHEN rep.id_tipo_reporte IS NOT NULL
+      AND rep.titulo IS NOT NULL
+      AND TRIM(rep.titulo)<>''
+     THEN rep.id_reporte
+    END) AS reportes_completos,
+
+    COUNT(DISTINCT CASE
+     WHEN rep.id_reporte IS NOT NULL
+      AND (
+       rep.id_tipo_reporte IS NULL
+       OR rep.titulo IS NULL
+       OR TRIM(rep.titulo)=''
+      )
+     THEN rep.id_reporte
+    END) AS reportes_incompletos,
+
+    MAX(
+     CASE
+      WHEN a.fecha_fin IS NULL THEN 1
+      ELSE 0
+     END
+    ) AS relacion_actual,
+
+    MIN(a.fecha_inicio) AS primera_asignacion,
+    MAX(a.fecha_fin) AS ultima_fecha_fin
+
+   FROM administrador a
+
+   INNER JOIN usuarios u
+    ON a.id_usuario=u.id_usuario
+
+   LEFT JOIN reportes rep
+    ON rep.id_usuario=u.id_usuario
+    AND rep.fecha_generacion>=a.fecha_inicio
+    AND (
+     a.fecha_fin IS NULL
+     OR rep.fecha_generacion<a.fecha_fin
+    )
+
+   WHERE
+    a.id_administrador=?
+    AND u.id_rol=2
+
+   GROUP BY
+    u.id_usuario,
+    u.nombre,
+    u.apellido,
+    u.correo,
+    u.estado
+
+   ORDER BY
+    relacion_actual DESC,
+    u.nombre ASC,
+    u.apellido ASC
+  `,[idAdministrador]);
+
+  return res.status(200).json({
+   estado:1,
+   mensaje:"Veedores del historial obtenidos correctamente",
+   administrador:administradores[0],
+   cantidad:veedores.length,
+   data:veedores
+  });
+
+ }catch(error){
+  console.error("❌ Error getVeedoresHistorial:",error);
+
+  return res.status(500).json({
+   estado:0,
+   mensaje:"Error al obtener el historial de veedores",
+   error:error.message
+  });
+ }
+};
+
+// ======================================================
+// HISTORIAL - REPORTES DE UN VEEDOR
+// ======================================================
+export const getReportesHistorialVeedor=async(req,res)=>{
+ try{
+  const idAdministrador=Number(req.params.id_administrador);
+  const idUsuario=Number(req.params.id_usuario);
+
+  if(!Number.isInteger(idAdministrador)||idAdministrador<=0){
+   return res.status(400).json({
+    estado:0,
+    mensaje:"Administrador no válido"
+   });
+  }
+
+  if(!Number.isInteger(idUsuario)||idUsuario<=0){
+   return res.status(400).json({
+    estado:0,
+    mensaje:"Veedor no válido"
+   });
+  }
+
+  // VALIDAR ADMINISTRADOR
+  const [administradores]=await conmysql.query(`
+   SELECT id_usuario,nombre,apellido,correo
+   FROM usuarios
+   WHERE id_usuario=? AND id_rol=1
+   LIMIT 1
+  `,[idAdministrador]);
+
+  if(administradores.length===0){
+   return res.status(404).json({
+    estado:0,
+    mensaje:"Administrador no encontrado"
+   });
+  }
+
+  // VALIDAR QUE EL VEEDOR HAYA ESTADO RELACIONADO
+  // CON ESTE ADMINISTRADOR
+  const [relaciones]=await conmysql.query(`
+   SELECT id_asignacion
+   FROM administrador
+   WHERE id_administrador=?
+    AND id_usuario=?
+   LIMIT 1
+  `,[idAdministrador,idUsuario]);
+
+  if(relaciones.length===0){
+   return res.status(403).json({
+    estado:0,
+    mensaje:"El veedor no pertenece ni ha pertenecido a este administrador"
+   });
+  }
+
+  // INFORMACIÓN DEL VEEDOR
+  const [veedores]=await conmysql.query(`
+   SELECT id_usuario,nombre,apellido,correo,estado
+   FROM usuarios
+   WHERE id_usuario=? AND id_rol=2
+   LIMIT 1
+  `,[idUsuario]);
+
+  if(veedores.length===0){
+   return res.status(404).json({
+    estado:0,
+    mensaje:"Veedor no encontrado"
+   });
+  }
+
+  // OBTENER TODOS LOS REPORTES QUE FUERON GENERADOS
+  // MIENTRAS EL VEEDOR PERTENECÍA A ESTE ADMINISTRADOR
+  const [reportes]=await conmysql.query(`
+   SELECT DISTINCT
+    rep.id_reporte,
+    rep.id_captura,
+    rep.id_usuario,
+    rep.id_tipo_reporte,
+    rep.titulo,
+    rep.archivo_pdf,
+    rep.archivo_csv,
+
+    DATE_FORMAT(
+     rep.fecha_generacion,
+     '%Y-%m-%d'
+    ) AS fecha_reporte,
+
+    DATE_FORMAT(
+     rep.fecha_generacion,
+     '%H:%i:%s'
+    ) AS hora_reporte,
+
+    DATE_FORMAT(
+     rep.fecha_generacion,
+     '%Y-%m-%d %H:%i:%s'
+    ) AS fecha_generacion,
+
+    tr.nombre_tipo,
+
+    c.peso,
+
+    DATE_FORMAT(
+     c.fecha_hora,
+     '%Y-%m-%d'
+    ) AS fecha_captura,
+
+    DATE_FORMAT(
+     c.fecha_hora,
+     '%H:%i:%s'
+    ) AS hora_captura,
+
+    d.id_deteccion,
+    d.porcentaje,
+    d.imagen_url,
+
+    e.id_especie,
+    e.nombre_comun AS especie,
+    e.nombre_cientifico,
+
+    CASE
+     WHEN rep.id_tipo_reporte IS NOT NULL
+      AND rep.titulo IS NOT NULL
+      AND TRIM(rep.titulo)<>''
+     THEN 'Completo'
+     ELSE 'Incompleto'
+    END AS estado_reporte
+
+   FROM reportes rep
+
+   INNER JOIN administrador a
+    ON a.id_usuario=rep.id_usuario
+
+   LEFT JOIN tipos_reporte tr
+    ON rep.id_tipo_reporte=tr.id_tipo_reporte
+
+   LEFT JOIN capturas c
+    ON rep.id_captura=c.id_captura
+
+   LEFT JOIN detecciones d
+    ON c.id_deteccion=d.id_deteccion
+
+   LEFT JOIN especies e
+    ON d.id_especie=e.id_especie
+
+   WHERE
+    rep.id_usuario=?
+    AND a.id_administrador=?
+
+    AND rep.fecha_generacion>=a.fecha_inicio
+
+    AND (
+     a.fecha_fin IS NULL
+     OR rep.fecha_generacion<a.fecha_fin
+    )
+
+   ORDER BY
+    rep.fecha_generacion DESC
+  `,[idUsuario,idAdministrador]);
+
+  const completos=reportes.filter(
+   reporte=>reporte.estado_reporte==="Completo"
+  ).length;
+
+  const incompletos=reportes.filter(
+   reporte=>reporte.estado_reporte==="Incompleto"
+  ).length;
+
+  return res.status(200).json({
+   estado:1,
+   mensaje:"Historial del veedor obtenido correctamente",
+
+   administrador:administradores[0],
+
+   veedor:veedores[0],
+
+   resumen:{
+    total:reportes.length,
+    completos,
+    incompletos
+   },
+
+   data:reportes
+  });
+
+ }catch(error){
+  console.error(
+   "❌ Error getReportesHistorialVeedor:",
+   error
+  );
+
+  return res.status(500).json({
+   estado:0,
+   mensaje:"Error al obtener los reportes del veedor",
+   error:error.message
+  });
+ }
+};
