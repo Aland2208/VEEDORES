@@ -137,7 +137,7 @@ export const loginUsuario = async (req, res) => {
                     bloqueado: true,
                     intentos_restantes: 0,
                     segundos_restantes: TIEMPO_BLOQUEO / 1000,
-                    mensaje: 'Has superado el máximo de 5 intentos fallidos. Acceso bloqueado durante 15 minutos.'
+                    mensaje: 'Has superado el máximo de 3 intentos fallidos. Acceso bloqueado durante 15 minutos.'
                 });
             }
 
