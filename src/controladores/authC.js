@@ -230,7 +230,7 @@ export const solicitarRecuperacion = async (req, res) => {
                 },
                 body: JSON.stringify({
                     sender: {
-                        name: "Sistema Observador de Pesca",
+                        name: "VIGÍA",
                         email: "veedoresbu@gmail.com"
                     },
                     to: [
@@ -238,32 +238,306 @@ export const solicitarRecuperacion = async (req, res) => {
                             email: correo
                         }
                     ],
-                    subject: "Recuperación de contraseña",
+                    subject: "Recuperación de contraseña | VIGÍA",
+
                     htmlContent: `
-      <div style="font-family:Arial,sans-serif;padding:20px;border:2px solid #3880ff;border-radius:8px;max-width:500px;margin:auto;">
-       <h2 style="color:#3880ff;text-align:center;">
-        Recuperación de Contraseña
-       </h2>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width,initial-scale=1.0">
+ <title>Recuperación de contraseña</title>
+</head>
 
-       <p style="color:#333;">
-        Has solicitado restablecer tu contraseña.
-        Haz clic en el botón de abajo para continuar:
-       </p>
+<body style="
+ margin:0;
+ padding:0;
+ background-color:#f3f6f9;
+ font-family:Arial,Helvetica,sans-serif;
+ color:#071627;
+">
 
-       <div style="text-align:center;margin:25px 0;">
-        <a href="${urlRecuperacion}"
-         style="background-color:#3880ff;color:white;padding:12px 20px;text-decoration:none;font-weight:bold;border-radius:5px;">
-         Restablecer mi contraseña
-        </a>
+ <table width="100%" cellpadding="0" cellspacing="0" border="0"
+  style="background-color:#f3f6f9;padding:40px 15px;">
+  <tr>
+   <td align="center">
+
+    <table width="100%" cellpadding="0" cellspacing="0" border="0"
+     style="
+      max-width:600px;
+      background:#ffffff;
+      border-radius:16px;
+      overflow:hidden;
+      box-shadow:0 4px 20px rgba(7,22,39,.08);
+     ">
+
+     <!-- BARRA SUPERIOR -->
+     <tr>
+      <td style="
+       height:6px;
+       background-color:#17b8ac;
+       font-size:0;
+       line-height:0;
+      ">
+       &nbsp;
+      </td>
+     </tr>
+
+     <!-- LOGO / CABECERA -->
+     <tr>
+      <td style="padding:35px 40px 25px 40px;">
+
+       <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+
+         <td width="62" valign="middle">
+          <div style="
+           width:52px;
+           height:52px;
+           background-color:#071627;
+           border-radius:12px;
+           text-align:center;
+           line-height:52px;
+           color:#5eead4;
+           font-size:27px;
+           font-weight:bold;
+          ">
+           ◎
+          </div>
+         </td>
+
+         <td valign="middle">
+          <div style="
+           font-size:26px;
+           font-weight:800;
+           color:#071627;
+           letter-spacing:1px;
+          ">
+           VIGÍA
+          </div>
+
+          <div style="
+           margin-top:4px;
+           font-size:11px;
+           font-weight:600;
+           color:#74889a;
+           letter-spacing:1.2px;
+          ">
+           OBSERVADORES · PESCA DE CERCO Y ATÚN
+          </div>
+         </td>
+
+        </tr>
+       </table>
+
+      </td>
+     </tr>
+
+     <!-- SEPARADOR -->
+     <tr>
+      <td style="padding:0 40px;">
+       <div style="
+        height:1px;
+        background-color:#e5eaef;
+       "></div>
+      </td>
+     </tr>
+
+     <!-- CONTENIDO -->
+     <tr>
+      <td style="
+       padding:38px 40px 15px 40px;
+       text-align:center;
+      ">
+
+       <!-- ICONO -->
+       <div style="
+        width:72px;
+        height:72px;
+        margin:0 auto 24px auto;
+        background-color:#e9fbf9;
+        border-radius:50%;
+        line-height:72px;
+        font-size:34px;
+       ">
+        🔒
        </div>
 
-       <hr style="border:none;border-top:1px solid #eee;margin-top:30px;"/>
+       <h1 style="
+        margin:0 0 15px 0;
+        font-size:28px;
+        line-height:36px;
+        color:#071627;
+        font-weight:800;
+       ">
+        Recuperación de contraseña
+       </h1>
 
-       <p style="font-size:11px;color:#999;text-align:center;">
-        Si no solicitaste esto, ignora este mensaje.
+       <p style="
+        margin:0 auto;
+        max-width:470px;
+        color:#66798a;
+        font-size:15px;
+        line-height:24px;
+       ">
+        Recibimos una solicitud para restablecer la contraseña
+        asociada a tu cuenta de <strong style="color:#071627;">VIGÍA</strong>.
        </p>
-      </div>
-     `
+
+      </td>
+     </tr>
+
+     <!-- BOTÓN -->
+     <tr>
+      <td align="center" style="padding:20px 40px 30px 40px;">
+
+       <table cellpadding="0" cellspacing="0" border="0">
+        <tr>
+         <td align="center"
+          style="
+           background-color:#ff7a52;
+           border-radius:30px;
+          ">
+
+          <a href="${urlRecuperacion}"
+           target="_blank"
+           style="
+            display:inline-block;
+            padding:16px 34px;
+            color:#071627;
+            text-decoration:none;
+            font-size:14px;
+            font-weight:800;
+            letter-spacing:.5px;
+           ">
+           RESTABLECER MI CONTRASEÑA →
+          </a>
+
+         </td>
+        </tr>
+       </table>
+
+      </td>
+     </tr>
+
+     <!-- INFORMACIÓN -->
+     <tr>
+      <td style="padding:0 40px 30px 40px;">
+
+       <table width="100%" cellpadding="0" cellspacing="0"
+        style="
+         background-color:#f5f8fa;
+         border-radius:12px;
+        ">
+
+        <tr>
+         <td width="45"
+          style="
+           padding:18px 0 18px 20px;
+           color:#17b8ac;
+           font-size:21px;
+           vertical-align:top;
+          ">
+          ◷
+         </td>
+
+         <td style="
+          padding:17px 20px 17px 5px;
+          color:#66798a;
+          font-size:13px;
+          line-height:20px;
+         ">
+
+          <strong style="color:#071627;">
+           Este enlace es válido durante 1 hora.
+          </strong>
+
+          <br>
+
+          Después de ese tiempo deberás solicitar un nuevo
+          enlace de recuperación.
+
+         </td>
+        </tr>
+
+       </table>
+
+      </td>
+     </tr>
+
+     <!-- SEGURIDAD -->
+     <tr>
+      <td style="padding:0 40px 35px 40px;">
+
+       <p style="
+        margin:0;
+        color:#8293a1;
+        font-size:12px;
+        line-height:19px;
+        text-align:center;
+       ">
+        Si no solicitaste un cambio de contraseña, puedes ignorar
+        este mensaje. Tu contraseña actual permanecerá sin cambios.
+       </p>
+
+      </td>
+     </tr>
+
+     <!-- FOOTER -->
+     <tr>
+      <td style="
+       padding:25px 40px;
+       background-color:#071627;
+       text-align:center;
+      ">
+
+       <div style="
+        color:#ffffff;
+        font-size:13px;
+        font-weight:700;
+        margin-bottom:6px;
+       ">
+        Sistema Observador de Pesca
+       </div>
+
+       <div style="
+        color:#5eead4;
+        font-size:11px;
+        letter-spacing:.7px;
+       ">
+        VIGÍA · DETECCIÓN DE ESPECIES CON IA
+       </div>
+
+       <div style="
+        margin-top:15px;
+        color:#8195a5;
+        font-size:10px;
+       ">
+        Este es un mensaje automático. No respondas a este correo.
+       </div>
+
+      </td>
+     </tr>
+
+    </table>
+
+    <!-- TEXTO EXTERIOR -->
+    <p style="
+     margin:20px 0 0 0;
+     color:#98a5b1;
+     font-size:11px;
+     text-align:center;
+    ">
+     © ${new Date().getFullYear()} VIGÍA · Sistema Observador de Pesca
+    </p>
+
+   </td>
+  </tr>
+ </table>
+
+</body>
+</html>
+`
                 })
             }
         );
@@ -286,7 +560,7 @@ export const solicitarRecuperacion = async (req, res) => {
             data.messageId
         );
 
-        res.status(200).json({
+        return res.status(200).json({
             estado: 1,
             mensaje: "Correo de recuperación enviado. Revisa tu bandeja de entrada."
         });
@@ -294,7 +568,7 @@ export const solicitarRecuperacion = async (req, res) => {
     } catch (error) {
         console.error('❌ Error interno:', error);
 
-        res.status(500).json({
+        return res.status(500).json({
             estado: 0,
             mensaje: "Error interno al enviar el correo."
         });
