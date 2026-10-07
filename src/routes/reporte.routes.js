@@ -3,7 +3,7 @@ import { Router } from "express";
 import {
     getReporteCapturas, getReportePorFechas, getResumenEspecies, getTiposReporte, getReportesPendientesHoy,
     generarPDFEspecie, generarCSVEspecie, enviarReporteEspecie, getHistorialReportes, getEspeciesFiltro, getDetalleReporte,
-    getReportesAdministradorHoy, editarTituloReporteAdmin, editarReporteAdmin, generarPDFReporteAdmin
+    getReportesAdministradorHoy, editarTituloReporteAdmin, editarReporteAdmin, generarPDFReporteAdmin, generarCSVReporteAdmin
 } from "../controladores/reporteC.js";
 
 
@@ -19,6 +19,7 @@ router.get("/admin/hoy/:id_administrador", getReportesAdministradorHoy);
 router.patch("/admin/:id_administrador/reporte/:id_reporte/titulo", editarTituloReporteAdmin);
 router.patch("/admin/:id_administrador/reporte/:id_reporte", editarReporteAdmin);
 router.get("/admin/:id_administrador/reporte/:id_reporte/pdf", generarPDFReporteAdmin);
+router.get("/admin/:id_administrador/reporte/:id_reporte/csv", generarCSVReporteAdmin);
 
 
 router.get(

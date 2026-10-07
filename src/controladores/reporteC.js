@@ -4073,3 +4073,195 @@ export const editarReporteAdmin = async (req, res) => {
         });
     }
 };
+
+// ======================================================
+// GENERAR CSV DE UN REPORTE - ADMINISTRADOR
+// ======================================================
+export const generarCSVReporteAdmin = async (req, res) => {
+    try {
+        const idAdministrador = Number(req.params.id_administrador);
+        const idReporte = Number(req.params.id_reporte);
+
+        if (!Number.isInteger(idAdministrador) || idAdministrador <= 0) {
+            return res.status(400).json({ estado: 0, mensaje: "Administrador no válido" });
+        }
+
+        if (!Number.isInteger(idReporte) || idReporte <= 0) {
+            return res.status(400).json({ estado: 0, mensaje: "Reporte no válido" });
+        }
+
+        // VALIDAR ADMINISTRADOR
+        const [administradores] = await conmysql.query(`
+   SELECT id_usuario
+   FROM usuarios
+   WHERE id_usuario=? AND id_rol=1
+   LIMIT 1
+  `, [idAdministrador]);
+
+        if (administradores.length === 0) {
+            return res.status(404).json({
+                estado: 0,
+                mensaje: "Administrador no encontrado"
+            });
+        }
+
+        // OBTENER REPORTE
+        const [reportes] = await conmysql.query(`
+   SELECT
+    rep.id_reporte,
+    rep.id_captura,
+    rep.id_usuario,
+    rep.id_tipo_reporte,
+    rep.titulo,
+    rep.archivo_pdf,
+    rep.archivo_csv,
+    DATE_FORMAT(rep.fecha_generacion,'%Y-%m-%d') AS fecha_reporte,
+    DATE_FORMAT(rep.fecha_generacion,'%H:%i:%s') AS hora_reporte,
+    u.nombre,
+    u.apellido,
+    u.correo,
+    CONCAT(u.nombre,' ',u.apellido) AS nombre_completo,
+    tr.nombre_tipo,
+    c.peso,
+    DATE_FORMAT(c.fecha_hora,'%Y-%m-%d') AS fecha_captura,
+    DATE_FORMAT(c.fecha_hora,'%H:%i:%s') AS hora_captura,
+    d.id_deteccion,
+    d.porcentaje,
+    d.imagen_url,
+    e.id_especie,
+    e.nombre_comun AS especie,
+    e.nombre_cientifico
+   FROM reportes rep
+   INNER JOIN usuarios u
+    ON rep.id_usuario=u.id_usuario
+   INNER JOIN administrador a
+    ON a.id_usuario=rep.id_usuario
+   LEFT JOIN tipos_reporte tr
+    ON rep.id_tipo_reporte=tr.id_tipo_reporte
+   LEFT JOIN capturas c
+    ON rep.id_captura=c.id_captura
+   LEFT JOIN detecciones d
+    ON c.id_deteccion=d.id_deteccion
+   LEFT JOIN especies e
+    ON d.id_especie=e.id_especie
+   WHERE rep.id_reporte=?
+    AND a.id_administrador=?
+    AND u.id_rol=2
+    AND rep.fecha_generacion>=a.fecha_inicio
+    AND (a.fecha_fin IS NULL OR rep.fecha_generacion<a.fecha_fin)
+   LIMIT 1
+  `, [idReporte, idAdministrador]);
+
+        if (reportes.length === 0) {
+            return res.status(404).json({
+                estado: 0,
+                mensaje: "El reporte no existe o no pertenece a uno de sus observadores"
+            });
+        }
+
+        const reporte = reportes[0];
+
+        // VALIDAR REPORTE COMPLETO
+        if (!reporte.titulo || String(reporte.titulo).trim() === "") {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Complete el título del reporte antes de generar el CSV"
+            });
+        }
+
+        if (!reporte.id_tipo_reporte) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Complete el tipo de reporte antes de generar el CSV"
+            });
+        }
+
+        // ESCAPAR VALORES PARA CSV
+        const csvValor = (valor) => {
+            if (valor === null || valor === undefined) return "";
+            const texto = String(valor).replace(/"/g, '""');
+            return `"${texto}"`;
+        };
+
+        // ENCABEZADOS
+        const encabezados = [
+            "ID Reporte",
+            "Título",
+            "Tipo de reporte",
+            "Observador",
+            "Correo",
+            "Especie",
+            "Nombre científico",
+            "Peso (g)",
+            "Confianza (%)",
+            "ID Captura",
+            "ID Detección",
+            "Fecha captura",
+            "Hora captura",
+            "Fecha reporte",
+            "Hora reporte"
+        ];
+
+        // DATOS
+        const fila = [
+            reporte.id_reporte,
+            reporte.titulo,
+            reporte.nombre_tipo,
+            reporte.nombre_completo,
+            reporte.correo,
+            reporte.especie,
+            reporte.nombre_cientifico,
+            reporte.peso,
+            reporte.porcentaje,
+            reporte.id_captura,
+            reporte.id_deteccion,
+            reporte.fecha_captura,
+            reporte.hora_captura,
+            reporte.fecha_reporte,
+            reporte.hora_reporte
+        ];
+
+        // BOM UTF-8 PARA EXCEL + CONTENIDO
+        const csv =
+            "\uFEFF" +
+            encabezados.map(csvValor).join(",") +
+            "\n" +
+            fila.map(csvValor).join(",");
+
+        // MARCAR COMO GENERADO
+        await conmysql.query(`
+   UPDATE reportes
+   SET archivo_csv=1
+   WHERE id_reporte=?
+  `, [idReporte]);
+
+        // NOMBRE DEL ARCHIVO
+        const nombreSeguro = String(reporte.titulo)
+            .replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ _-]/g, "")
+            .replace(/\s+/g, "_")
+            .substring(0, 80);
+
+        const nombreArchivo = `Reporte_${idReporte}_${nombreSeguro}.csv`;
+
+        res.setHeader(
+            "Content-Type",
+            "text/csv; charset=utf-8"
+        );
+
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${nombreArchivo}"`
+        );
+
+        return res.status(200).send(csv);
+
+    } catch (error) {
+        console.error("❌ Error generarCSVReporteAdmin:", error);
+
+        return res.status(500).json({
+            estado: 0,
+            mensaje: "Error al generar el CSV del reporte",
+            error: error.message
+        });
+    }
+};
