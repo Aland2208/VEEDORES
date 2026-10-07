@@ -967,7 +967,7 @@ export const getReportesPendientesHoy = async (req, res) => {
             totalRegistros > 0
 
                 ? confianzaTotal /
-                  totalRegistros
+                totalRegistros
 
                 : 0;
 
@@ -1722,7 +1722,7 @@ const crearPDFBuffer = async ({
                 const confianzaPromedio =
                     totalCapturas > 0
                         ? confianzaTotal /
-                          totalCapturas
+                        totalCapturas
                         : 0;
 
 
@@ -2347,6 +2347,167 @@ const crearPDFBuffer = async ({
     );
 };
 
+// ======================================================
+// GENERAR PDF DE UN REPORTE - ADMINISTRADOR
+// ======================================================
+export const generarPDFReporteAdmin = async (req, res) => {
+    try {
+        const idAdministrador = Number(req.params.id_administrador);
+        const idReporte = Number(req.params.id_reporte);
+
+        if (!Number.isInteger(idAdministrador) || idAdministrador <= 0) {
+            return res.status(400).json({ estado: 0, mensaje: "Administrador no válido" });
+        }
+
+        if (!Number.isInteger(idReporte) || idReporte <= 0) {
+            return res.status(400).json({ estado: 0, mensaje: "Reporte no válido" });
+        }
+
+        // VALIDAR ADMINISTRADOR
+        const [administradores] = await conmysql.query(`
+   SELECT id_usuario,nombre,apellido
+   FROM usuarios
+   WHERE id_usuario=? AND id_rol=1
+   LIMIT 1
+  `, [idAdministrador]);
+
+        if (administradores.length === 0) {
+            return res.status(404).json({
+                estado: 0,
+                mensaje: "Administrador no encontrado"
+            });
+        }
+
+        // OBTENER REPORTE Y COMPROBAR QUE PERTENECE
+        // A UN OBSERVADOR DEL ADMINISTRADOR
+        const [reportes] = await conmysql.query(`
+   SELECT
+    rep.id_reporte,
+    rep.id_captura,
+    rep.id_usuario,
+    rep.id_tipo_reporte,
+    rep.titulo,
+    rep.archivo_pdf,
+    rep.archivo_csv,
+    DATE_FORMAT(rep.fecha_generacion,'%Y-%m-%d') AS fecha_reporte,
+    c.peso,
+    DATE_FORMAT(c.fecha_hora,'%Y-%m-%d') AS fecha_captura,
+    DATE_FORMAT(c.fecha_hora,'%H:%i:%s') AS hora_captura,
+    d.id_deteccion,
+    d.porcentaje,
+    d.imagen_url,
+    e.id_especie,
+    e.nombre_comun AS especie,
+    e.nombre_cientifico,
+    u.nombre,
+    u.apellido,
+    CONCAT(u.nombre,' ',u.apellido) AS nombre_completo,
+    r.id_rol,
+    r.nombre_rol
+   FROM reportes rep
+   INNER JOIN capturas c
+    ON rep.id_captura=c.id_captura
+   INNER JOIN detecciones d
+    ON c.id_deteccion=d.id_deteccion
+   INNER JOIN especies e
+    ON d.id_especie=e.id_especie
+   INNER JOIN usuarios u
+    ON rep.id_usuario=u.id_usuario
+   INNER JOIN roles r
+    ON u.id_rol=r.id_rol
+   INNER JOIN administrador a
+    ON a.id_usuario=rep.id_usuario
+   WHERE rep.id_reporte=?
+    AND a.id_administrador=?
+    AND u.id_rol=2
+    AND rep.fecha_generacion>=a.fecha_inicio
+    AND (a.fecha_fin IS NULL OR rep.fecha_generacion<a.fecha_fin)
+   LIMIT 1
+  `, [idReporte, idAdministrador]);
+
+        if (reportes.length === 0) {
+            return res.status(404).json({
+                estado: 0,
+                mensaje: "El reporte no existe o no pertenece a uno de sus observadores"
+            });
+        }
+
+        const reporte = reportes[0];
+
+        // VALIDAR QUE EL REPORTE ESTÉ COMPLETO
+        if (!reporte.titulo || String(reporte.titulo).trim() === "") {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "El reporte no tiene un título. Complete el reporte antes de generar el PDF."
+            });
+        }
+
+        if (!reporte.id_tipo_reporte) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "El reporte no tiene un tipo. Complete el reporte antes de generar el PDF."
+            });
+        }
+
+        // OBTENER TIPO DE REPORTE
+        const [tipos] = await conmysql.query(`
+   SELECT id_tipo_reporte,nombre_tipo
+   FROM tipos_reporte
+   WHERE id_tipo_reporte=?
+   LIMIT 1
+  `, [reporte.id_tipo_reporte]);
+
+        if (tipos.length === 0) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "El tipo de reporte seleccionado no existe"
+            });
+        }
+
+        const tipoReporte = tipos[0];
+
+        // GENERAR PDF UTILIZANDO LA FUNCIÓN EXISTENTE
+        const pdfBuffer = await crearPDFBuffer({
+            reportes: [reporte],
+            tipoReporte,
+            titulo: reporte.titulo
+        });
+
+        // MARCAR PDF COMO GENERADO
+        await conmysql.query(`
+   UPDATE reportes
+   SET archivo_pdf=1
+   WHERE id_reporte=?
+  `, [idReporte]);
+
+        // NOMBRE DEL ARCHIVO
+        const nombreSeguro = String(reporte.titulo)
+            .replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ _-]/g, "")
+            .replace(/\s+/g, "_")
+            .substring(0, 80);
+
+        const nombreArchivo = `Reporte_${idReporte}_${nombreSeguro}.pdf`;
+
+        // DEVOLVER PDF
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${nombreArchivo}"`
+        );
+        res.setHeader("Content-Length", pdfBuffer.length);
+
+        return res.status(200).send(pdfBuffer);
+
+    } catch (error) {
+        console.error("❌ Error generarPDFReporteAdmin:", error);
+
+        return res.status(500).json({
+            estado: 0,
+            mensaje: "Error al generar el PDF del reporte",
+            error: error.message
+        });
+    }
+};
 
 // ======================================================
 // GENERAR PDF POR ESPECIE
@@ -3196,7 +3357,7 @@ export const enviarReporteEspecie = async (req, res) => {
 
     } catch (error) {
         if (conexion) {
-            try { await conexion.rollback(); } catch {}
+            try { await conexion.rollback(); } catch { }
         }
 
         console.error("❌ Error enviarReporteEspecie:", error);
@@ -3529,7 +3690,7 @@ export const getDetalleReporte = async (req, res) => {
             ? capturas.reduce(
                 (total, captura) => total + captura.porcentaje,
                 0
-              ) / capturas.length
+            ) / capturas.length
             : 0;
 
         return res.status(200).json({
@@ -3570,44 +3731,44 @@ export const getDetalleReporte = async (req, res) => {
 // ======================================================
 // REPORTES DEL DÍA - ADMINISTRADOR
 // ======================================================
-export const getReportesAdministradorHoy=async(req,res)=>{
- try{
-  const idAdministrador=Number(req.params.id_administrador);
+export const getReportesAdministradorHoy = async (req, res) => {
+    try {
+        const idAdministrador = Number(req.params.id_administrador);
 
-  if(!Number.isInteger(idAdministrador)||idAdministrador<=0){
-   return res.status(400).json({
-    estado:0,
-    mensaje:"Administrador no válido"
-   });
-  }
+        if (!Number.isInteger(idAdministrador) || idAdministrador <= 0) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Administrador no válido"
+            });
+        }
 
-  // Validar que exista y sea administrador
-  const [administradores]=await conmysql.query(`
+        // Validar que exista y sea administrador
+        const [administradores] = await conmysql.query(`
    SELECT id_usuario,nombre,apellido,correo
    FROM usuarios
    WHERE id_usuario=? AND id_rol=1
    LIMIT 1
-  `,[idAdministrador]);
+  `, [idAdministrador]);
 
-  if(administradores.length===0){
-   return res.status(404).json({
-    estado:0,
-    mensaje:"Administrador no encontrado"
-   });
-  }
+        if (administradores.length === 0) {
+            return res.status(404).json({
+                estado: 0,
+                mensaje: "Administrador no encontrado"
+            });
+        }
 
-  // Fecha actual de Ecuador
-  const [fechaActual]=await conmysql.query(`
+        // Fecha actual de Ecuador
+        const [fechaActual] = await conmysql.query(`
    SELECT DATE_FORMAT(
     CONVERT_TZ(UTC_TIMESTAMP(),'+00:00','-05:00'),
     '%Y-%m-%d'
    ) AS fecha_ecuador
   `);
 
-  const fechaEcuador=fechaActual[0].fecha_ecuador;
+        const fechaEcuador = fechaActual[0].fecha_ecuador;
 
-  // Todos los reportes del día de observadores asociados al administrador
-  const [reportes]=await conmysql.query(`
+        // Todos los reportes del día de observadores asociados al administrador
+        const [reportes] = await conmysql.query(`
    SELECT
     rep.id_reporte,
     rep.id_captura,
@@ -3682,73 +3843,73 @@ export const getReportesAdministradorHoy=async(req,res)=>{
     AND rep.fecha_generacion<DATE_ADD(?,INTERVAL 1 DAY)
 
    ORDER BY rep.fecha_generacion DESC
-  `,[idAdministrador,fechaEcuador,fechaEcuador]);
+  `, [idAdministrador, fechaEcuador, fechaEcuador]);
 
-  const completos=reportes.filter(r=>r.estado_reporte==="Completo").length;
-  const incompletos=reportes.filter(r=>r.estado_reporte==="Incompleto").length;
+        const completos = reportes.filter(r => r.estado_reporte === "Completo").length;
+        const incompletos = reportes.filter(r => r.estado_reporte === "Incompleto").length;
 
-  return res.status(200).json({
-   estado:1,
-   mensaje:"Reportes del día obtenidos correctamente",
-   fecha_ecuador:fechaEcuador,
-   administrador:administradores[0],
-   resumen:{
-    total:reportes.length,
-    completos,
-    incompletos
-   },
-   data:reportes
-  });
+        return res.status(200).json({
+            estado: 1,
+            mensaje: "Reportes del día obtenidos correctamente",
+            fecha_ecuador: fechaEcuador,
+            administrador: administradores[0],
+            resumen: {
+                total: reportes.length,
+                completos,
+                incompletos
+            },
+            data: reportes
+        });
 
- }catch(error){
-  console.error("❌ Error getReportesAdministradorHoy:",error);
-  return res.status(500).json({
-   estado:0,
-   mensaje:"Error al obtener los reportes del administrador",
-   error:error.message
-  });
- }
+    } catch (error) {
+        console.error("❌ Error getReportesAdministradorHoy:", error);
+        return res.status(500).json({
+            estado: 0,
+            mensaje: "Error al obtener los reportes del administrador",
+            error: error.message
+        });
+    }
 };
 
 // ======================================================
 // EDITAR TÍTULO DE REPORTE - ADMINISTRADOR
 // ======================================================
-export const editarTituloReporteAdmin=async(req,res)=>{
- try{
-  const idAdministrador=Number(req.params.id_administrador);
-  const idReporte=Number(req.params.id_reporte);
-  const {titulo}=req.body;
+export const editarTituloReporteAdmin = async (req, res) => {
+    try {
+        const idAdministrador = Number(req.params.id_administrador);
+        const idReporte = Number(req.params.id_reporte);
+        const { titulo } = req.body;
 
-  if(!Number.isInteger(idAdministrador)||idAdministrador<=0){
-   return res.status(400).json({estado:0,mensaje:"Administrador no válido"});
-  }
+        if (!Number.isInteger(idAdministrador) || idAdministrador <= 0) {
+            return res.status(400).json({ estado: 0, mensaje: "Administrador no válido" });
+        }
 
-  if(!Number.isInteger(idReporte)||idReporte<=0){
-   return res.status(400).json({estado:0,mensaje:"Reporte no válido"});
-  }
+        if (!Number.isInteger(idReporte) || idReporte <= 0) {
+            return res.status(400).json({ estado: 0, mensaje: "Reporte no válido" });
+        }
 
-  if(!titulo||String(titulo).trim()===""){
-   return res.status(400).json({estado:0,mensaje:"El título del reporte es obligatorio"});
-  }
+        if (!titulo || String(titulo).trim() === "") {
+            return res.status(400).json({ estado: 0, mensaje: "El título del reporte es obligatorio" });
+        }
 
-  const tituloLimpio=String(titulo).trim();
+        const tituloLimpio = String(titulo).trim();
 
-  // Validar administrador
-  const [administradores]=await conmysql.query(`
+        // Validar administrador
+        const [administradores] = await conmysql.query(`
    SELECT id_usuario
    FROM usuarios
    WHERE id_usuario=? AND id_rol=1
    LIMIT 1
-  `,[idAdministrador]);
+  `, [idAdministrador]);
 
-  if(administradores.length===0){
-   return res.status(404).json({estado:0,mensaje:"Administrador no encontrado"});
-  }
+        if (administradores.length === 0) {
+            return res.status(404).json({ estado: 0, mensaje: "Administrador no encontrado" });
+        }
 
-  // Verificar que el reporte pertenezca a un observador
-  // asociado al administrador en el momento del reporte
-  // y que corresponda al día actual de Ecuador.
-  const [reportes]=await conmysql.query(`
+        // Verificar que el reporte pertenezca a un observador
+        // asociado al administrador en el momento del reporte
+        // y que corresponda al día actual de Ecuador.
+        const [reportes] = await conmysql.query(`
    SELECT rep.id_reporte,rep.id_usuario,rep.titulo
    FROM reportes rep
    INNER JOIN usuarios u
@@ -3764,97 +3925,97 @@ export const editarTituloReporteAdmin=async(req,res)=>{
      CONVERT_TZ(UTC_TIMESTAMP(),'+00:00','-05:00')
     )
    LIMIT 1
-  `,[idReporte,idAdministrador]);
+  `, [idReporte, idAdministrador]);
 
-  if(reportes.length===0){
-   return res.status(404).json({
-    estado:0,
-    mensaje:"El reporte no existe o no pertenece a uno de sus observadores"
-   });
-  }
+        if (reportes.length === 0) {
+            return res.status(404).json({
+                estado: 0,
+                mensaje: "El reporte no existe o no pertenece a uno de sus observadores"
+            });
+        }
 
-  // ÚNICO CAMPO QUE PUEDE MODIFICAR EL ADMINISTRADOR
-  await conmysql.query(`
+        // ÚNICO CAMPO QUE PUEDE MODIFICAR EL ADMINISTRADOR
+        await conmysql.query(`
    UPDATE reportes
    SET titulo=?
    WHERE id_reporte=?
-  `,[tituloLimpio,idReporte]);
+  `, [tituloLimpio, idReporte]);
 
-  return res.status(200).json({
-   estado:1,
-   mensaje:"Título actualizado correctamente",
-   data:{
-    id_reporte:idReporte,
-    titulo:tituloLimpio
-   }
-  });
+        return res.status(200).json({
+            estado: 1,
+            mensaje: "Título actualizado correctamente",
+            data: {
+                id_reporte: idReporte,
+                titulo: tituloLimpio
+            }
+        });
 
- }catch(error){
-  console.error("❌ Error editarTituloReporteAdmin:",error);
-  return res.status(500).json({
-   estado:0,
-   mensaje:"Error al actualizar el título del reporte",
-   error:error.message
-  });
- }
+    } catch (error) {
+        console.error("❌ Error editarTituloReporteAdmin:", error);
+        return res.status(500).json({
+            estado: 0,
+            mensaje: "Error al actualizar el título del reporte",
+            error: error.message
+        });
+    }
 };
 
 // ======================================================
 // EDITAR REPORTE - ADMINISTRADOR
 // ======================================================
-export const editarReporteAdmin=async(req,res)=>{
- try{
-  const idAdministrador=Number(req.params.id_administrador);
-  const idReporte=Number(req.params.id_reporte);
-  const {titulo,id_tipo_reporte}=req.body;
+export const editarReporteAdmin = async (req, res) => {
+    try {
+        const idAdministrador = Number(req.params.id_administrador);
+        const idReporte = Number(req.params.id_reporte);
+        const { titulo, id_tipo_reporte } = req.body;
 
-  if(!Number.isInteger(idAdministrador)||idAdministrador<=0){
-   return res.status(400).json({estado:0,mensaje:"Administrador no válido"});
-  }
+        if (!Number.isInteger(idAdministrador) || idAdministrador <= 0) {
+            return res.status(400).json({ estado: 0, mensaje: "Administrador no válido" });
+        }
 
-  if(!Number.isInteger(idReporte)||idReporte<=0){
-   return res.status(400).json({estado:0,mensaje:"Reporte no válido"});
-  }
+        if (!Number.isInteger(idReporte) || idReporte <= 0) {
+            return res.status(400).json({ estado: 0, mensaje: "Reporte no válido" });
+        }
 
-  if(!titulo||String(titulo).trim()===""){
-   return res.status(400).json({estado:0,mensaje:"El título del reporte es obligatorio"});
-  }
+        if (!titulo || String(titulo).trim() === "") {
+            return res.status(400).json({ estado: 0, mensaje: "El título del reporte es obligatorio" });
+        }
 
-  const idTipo=Number(id_tipo_reporte);
+        const idTipo = Number(id_tipo_reporte);
 
-  if(!Number.isInteger(idTipo)||idTipo<=0){
-   return res.status(400).json({estado:0,mensaje:"Debe seleccionar un tipo de reporte"});
-  }
+        if (!Number.isInteger(idTipo) || idTipo <= 0) {
+            return res.status(400).json({ estado: 0, mensaje: "Debe seleccionar un tipo de reporte" });
+        }
 
-  const tituloLimpio=String(titulo).trim();
+        const tituloLimpio = String(titulo).trim();
 
-  // Validar administrador
-  const [administradores]=await conmysql.query(`
+        // Validar administrador
+        const [administradores] = await conmysql.query(`
    SELECT id_usuario
    FROM usuarios
    WHERE id_usuario=? AND id_rol=1
    LIMIT 1
-  `,[idAdministrador]);
+  `, [idAdministrador]);
 
-  if(administradores.length===0){
-   return res.status(404).json({estado:0,mensaje:"Administrador no encontrado"});
-  }
+        if (administradores.length === 0) {
+            return res.status(404).json({ estado: 0, mensaje: "Administrador no encontrado" });
+        }
 
-  // Validar tipo de reporte
-  const [tipos]=await conmysql.query(`
+        // Validar tipo de reporte
+        const [tipos] = await conmysql.query(`
    SELECT id_tipo_reporte,nombre_tipo
    FROM tipos_reporte
    WHERE id_tipo_reporte=?
    LIMIT 1
-  `,[idTipo]);
+  `, [idTipo]);
 
-  if(tipos.length===0){
-   return res.status(404).json({estado:0,mensaje:"El tipo de reporte no existe"});
-  }
+        if (tipos.length === 0) {
+            return res.status(404).json({ estado: 0, mensaje: "El tipo de reporte no existe" });
+        }
 
-  // Validar que el reporte corresponda a un observador
-  // asociado al administrador cuando se generó el reporte.
-  const [reportes]=await conmysql.query(`
+        // Validar que el reporte corresponda a un observador
+        // asociado al administrador cuando se generó el reporte.
+        const [reportes] = await conmysql.query(`
    SELECT rep.id_reporte,rep.id_usuario
    FROM reportes rep
    INNER JOIN usuarios u
@@ -3870,39 +4031,45 @@ export const editarReporteAdmin=async(req,res)=>{
      CONVERT_TZ(UTC_TIMESTAMP(),'+00:00','-05:00')
     )
    LIMIT 1
-  `,[idReporte,idAdministrador]);
+  `, [idReporte, idAdministrador]);
 
-  if(reportes.length===0){
-   return res.status(404).json({
-    estado:0,
-    mensaje:"El reporte no existe o no pertenece a uno de sus observadores"
-   });
-  }
+        if (reportes.length === 0) {
+            return res.status(404).json({
+                estado: 0,
+                mensaje: "El reporte no existe o no pertenece a uno de sus observadores"
+            });
+        }
 
-  // Solo se modifican título y tipo
-  await conmysql.query(`
-   UPDATE reportes
-   SET titulo=?,id_tipo_reporte=?
-   WHERE id_reporte=?
-  `,[tituloLimpio,idTipo,idReporte]);
+        // Solo se modifican título y tipo
+        await conmysql.query(`
+    UPDATE reportes
+    SET titulo=?,
+     id_tipo_reporte=?,
+     archivo_pdf=0,
+     archivo_csv=0
+    WHERE id_reporte=?`,
+            [tituloLimpio,
+                idTipo,
+                idReporte
+            ]);
 
-  return res.status(200).json({
-   estado:1,
-   mensaje:"Reporte actualizado correctamente",
-   data:{
-    id_reporte:idReporte,
-    titulo:tituloLimpio,
-    id_tipo_reporte:idTipo,
-    nombre_tipo:tipos[0].nombre_tipo
-   }
-  });
+        return res.status(200).json({
+            estado: 1,
+            mensaje: "Reporte actualizado correctamente",
+            data: {
+                id_reporte: idReporte,
+                titulo: tituloLimpio,
+                id_tipo_reporte: idTipo,
+                nombre_tipo: tipos[0].nombre_tipo
+            }
+        });
 
- }catch(error){
-  console.error("❌ Error editarReporteAdmin:",error);
-  return res.status(500).json({
-   estado:0,
-   mensaje:"Error al actualizar el reporte",
-   error:error.message
-  });
- }
+    } catch (error) {
+        console.error("❌ Error editarReporteAdmin:", error);
+        return res.status(500).json({
+            estado: 0,
+            mensaje: "Error al actualizar el reporte",
+            error: error.message
+        });
+    }
 };
