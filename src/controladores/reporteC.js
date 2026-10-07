@@ -3566,3 +3566,146 @@ export const getDetalleReporte = async (req, res) => {
         });
     }
 };
+
+// ======================================================
+// REPORTES DEL DÍA - ADMINISTRADOR
+// ======================================================
+export const getReportesAdministradorHoy=async(req,res)=>{
+ try{
+  const idAdministrador=Number(req.params.id_administrador);
+
+  if(!Number.isInteger(idAdministrador)||idAdministrador<=0){
+   return res.status(400).json({
+    estado:0,
+    mensaje:"Administrador no válido"
+   });
+  }
+
+  // Validar que exista y sea administrador
+  const [administradores]=await conmysql.query(`
+   SELECT id_usuario,nombre,apellido,correo
+   FROM usuarios
+   WHERE id_usuario=? AND id_rol=1
+   LIMIT 1
+  `,[idAdministrador]);
+
+  if(administradores.length===0){
+   return res.status(404).json({
+    estado:0,
+    mensaje:"Administrador no encontrado"
+   });
+  }
+
+  // Fecha actual de Ecuador
+  const [fechaActual]=await conmysql.query(`
+   SELECT DATE_FORMAT(
+    CONVERT_TZ(UTC_TIMESTAMP(),'+00:00','-05:00'),
+    '%Y-%m-%d'
+   ) AS fecha_ecuador
+  `);
+
+  const fechaEcuador=fechaActual[0].fecha_ecuador;
+
+  // Todos los reportes del día de observadores asociados al administrador
+  const [reportes]=await conmysql.query(`
+   SELECT
+    rep.id_reporte,
+    rep.id_captura,
+    rep.id_usuario,
+    rep.id_tipo_reporte,
+    rep.titulo,
+    rep.archivo_pdf,
+    rep.archivo_csv,
+
+    DATE_FORMAT(rep.fecha_generacion,'%Y-%m-%d') AS fecha_reporte,
+    DATE_FORMAT(rep.fecha_generacion,'%H:%i:%s') AS hora_reporte,
+    DATE_FORMAT(rep.fecha_generacion,'%Y-%m-%d %H:%i:%s') AS fecha_generacion,
+
+    u.nombre,
+    u.apellido,
+    u.correo,
+    CONCAT(u.nombre,' ',u.apellido) AS nombre_completo,
+
+    tr.nombre_tipo,
+
+    c.peso,
+    DATE_FORMAT(c.fecha_hora,'%Y-%m-%d') AS fecha_captura,
+    DATE_FORMAT(c.fecha_hora,'%H:%i:%s') AS hora_captura,
+
+    d.id_deteccion,
+    d.porcentaje,
+    d.imagen_url,
+
+    e.id_especie,
+    e.nombre_comun AS especie,
+    e.nombre_cientifico,
+
+    CASE
+     WHEN rep.id_tipo_reporte IS NOT NULL
+      AND rep.titulo IS NOT NULL
+      AND TRIM(rep.titulo)<>''
+     THEN 'Completo'
+     ELSE 'Incompleto'
+    END AS estado_reporte
+
+   FROM reportes rep
+
+   INNER JOIN usuarios u
+    ON rep.id_usuario=u.id_usuario
+
+   INNER JOIN administrador a
+    ON a.id_usuario=rep.id_usuario
+
+   LEFT JOIN tipos_reporte tr
+    ON rep.id_tipo_reporte=tr.id_tipo_reporte
+
+   LEFT JOIN capturas c
+    ON rep.id_captura=c.id_captura
+
+   LEFT JOIN detecciones d
+    ON c.id_deteccion=d.id_deteccion
+
+   LEFT JOIN especies e
+    ON d.id_especie=e.id_especie
+
+   WHERE
+    a.id_administrador=?
+    AND u.id_rol=2
+
+    AND rep.fecha_generacion>=a.fecha_inicio
+    AND (
+     a.fecha_fin IS NULL
+     OR rep.fecha_generacion<a.fecha_fin
+    )
+
+    AND rep.fecha_generacion>=?
+    AND rep.fecha_generacion<DATE_ADD(?,INTERVAL 1 DAY)
+
+   ORDER BY rep.fecha_generacion DESC
+  `,[idAdministrador,fechaEcuador,fechaEcuador]);
+
+  const completos=reportes.filter(r=>r.estado_reporte==="Completo").length;
+  const incompletos=reportes.filter(r=>r.estado_reporte==="Incompleto").length;
+
+  return res.status(200).json({
+   estado:1,
+   mensaje:"Reportes del día obtenidos correctamente",
+   fecha_ecuador:fechaEcuador,
+   administrador:administradores[0],
+   resumen:{
+    total:reportes.length,
+    completos,
+    incompletos
+   },
+   data:reportes
+  });
+
+ }catch(error){
+  console.error("❌ Error getReportesAdministradorHoy:",error);
+  return res.status(500).json({
+   estado:0,
+   mensaje:"Error al obtener los reportes del administrador",
+   error:error.message
+  });
+ }
+};
