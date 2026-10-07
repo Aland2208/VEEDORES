@@ -3798,3 +3798,111 @@ export const editarTituloReporteAdmin=async(req,res)=>{
   });
  }
 };
+
+// ======================================================
+// EDITAR REPORTE - ADMINISTRADOR
+// ======================================================
+export const editarReporteAdmin=async(req,res)=>{
+ try{
+  const idAdministrador=Number(req.params.id_administrador);
+  const idReporte=Number(req.params.id_reporte);
+  const {titulo,id_tipo_reporte}=req.body;
+
+  if(!Number.isInteger(idAdministrador)||idAdministrador<=0){
+   return res.status(400).json({estado:0,mensaje:"Administrador no válido"});
+  }
+
+  if(!Number.isInteger(idReporte)||idReporte<=0){
+   return res.status(400).json({estado:0,mensaje:"Reporte no válido"});
+  }
+
+  if(!titulo||String(titulo).trim()===""){
+   return res.status(400).json({estado:0,mensaje:"El título del reporte es obligatorio"});
+  }
+
+  const idTipo=Number(id_tipo_reporte);
+
+  if(!Number.isInteger(idTipo)||idTipo<=0){
+   return res.status(400).json({estado:0,mensaje:"Debe seleccionar un tipo de reporte"});
+  }
+
+  const tituloLimpio=String(titulo).trim();
+
+  // Validar administrador
+  const [administradores]=await conmysql.query(`
+   SELECT id_usuario
+   FROM usuarios
+   WHERE id_usuario=? AND id_rol=1
+   LIMIT 1
+  `,[idAdministrador]);
+
+  if(administradores.length===0){
+   return res.status(404).json({estado:0,mensaje:"Administrador no encontrado"});
+  }
+
+  // Validar tipo de reporte
+  const [tipos]=await conmysql.query(`
+   SELECT id_tipo_reporte,nombre_tipo
+   FROM tipos_reporte
+   WHERE id_tipo_reporte=?
+   LIMIT 1
+  `,[idTipo]);
+
+  if(tipos.length===0){
+   return res.status(404).json({estado:0,mensaje:"El tipo de reporte no existe"});
+  }
+
+  // Validar que el reporte corresponda a un observador
+  // asociado al administrador cuando se generó el reporte.
+  const [reportes]=await conmysql.query(`
+   SELECT rep.id_reporte,rep.id_usuario
+   FROM reportes rep
+   INNER JOIN usuarios u
+    ON rep.id_usuario=u.id_usuario
+   INNER JOIN administrador a
+    ON a.id_usuario=rep.id_usuario
+   WHERE rep.id_reporte=?
+    AND a.id_administrador=?
+    AND u.id_rol=2
+    AND rep.fecha_generacion>=a.fecha_inicio
+    AND (a.fecha_fin IS NULL OR rep.fecha_generacion<a.fecha_fin)
+    AND DATE(rep.fecha_generacion)=DATE(
+     CONVERT_TZ(UTC_TIMESTAMP(),'+00:00','-05:00')
+    )
+   LIMIT 1
+  `,[idReporte,idAdministrador]);
+
+  if(reportes.length===0){
+   return res.status(404).json({
+    estado:0,
+    mensaje:"El reporte no existe o no pertenece a uno de sus observadores"
+   });
+  }
+
+  // Solo se modifican título y tipo
+  await conmysql.query(`
+   UPDATE reportes
+   SET titulo=?,id_tipo_reporte=?
+   WHERE id_reporte=?
+  `,[tituloLimpio,idTipo,idReporte]);
+
+  return res.status(200).json({
+   estado:1,
+   mensaje:"Reporte actualizado correctamente",
+   data:{
+    id_reporte:idReporte,
+    titulo:tituloLimpio,
+    id_tipo_reporte:idTipo,
+    nombre_tipo:tipos[0].nombre_tipo
+   }
+  });
+
+ }catch(error){
+  console.error("❌ Error editarReporteAdmin:",error);
+  return res.status(500).json({
+   estado:0,
+   mensaje:"Error al actualizar el reporte",
+   error:error.message
+  });
+ }
+};
