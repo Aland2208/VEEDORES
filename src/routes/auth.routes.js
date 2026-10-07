@@ -1,11 +1,5 @@
 import { Router } from "express";
-import {
-    registrarUsuario,
-    loginUsuario,
-    solicitarRecuperacion,
-    restablecerPassword,
-    obtenerPerfil,
-    actualizarPerfil,
+import {registrarUsuario, loginUsuario, solicitarRecuperacion, restablecerPassword, obtenerPerfil, actualizarPerfil,
     cambiarPassword
 } from "../controladores/authC.js";
 
