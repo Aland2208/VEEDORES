@@ -33,6 +33,7 @@ app.use('/api/dashboard', dashboardRouters)
 app.use('/api/administrador',administradorR);
 app.use('/api/usuarios',usuariosR);
 
+
 app.use((req, resp, next) => {
     resp.status(400).json({
         message: 'Endpoint not fount'

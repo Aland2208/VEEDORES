@@ -1,8 +1,9 @@
 import { Router } from "express";
 
-import { getReporteCapturas, getReportePorFechas, getResumenEspecies, getTiposReporte, getReportesPendientesHoy, 
+import {
+    getReporteCapturas, getReportePorFechas, getResumenEspecies, getTiposReporte, getReportesPendientesHoy,
     generarPDFEspecie, generarCSVEspecie, enviarReporteEspecie, getHistorialReportes, getEspeciesFiltro, getDetalleReporte,
-    getReportesAdministradorHoy
+    getReportesAdministradorHoy, editarTituloReporteAdmin
 } from "../controladores/reporteC.js";
 
 
@@ -13,6 +14,9 @@ router.get("/tipos", getTiposReporte);
 router.get("/admin/hoy/:id_administrador", getReportesAdministradorHoy);
 router.get("/pendientes/hoy/:id_usuario", getReportesPendientesHoy);
 router.get("/capturas/:id_usuario/fecha", getReportePorFechas);
+router.get("/admin/hoy/:id_administrador", getReportesAdministradorHoy);
+
+router.patch("/admin/:id_administrador/reporte/:id_reporte/titulo", editarTituloReporteAdmin);
 
 
 router.get(

@@ -3709,3 +3709,92 @@ export const getReportesAdministradorHoy=async(req,res)=>{
   });
  }
 };
+
+// ======================================================
+// EDITAR TÍTULO DE REPORTE - ADMINISTRADOR
+// ======================================================
+export const editarTituloReporteAdmin=async(req,res)=>{
+ try{
+  const idAdministrador=Number(req.params.id_administrador);
+  const idReporte=Number(req.params.id_reporte);
+  const {titulo}=req.body;
+
+  if(!Number.isInteger(idAdministrador)||idAdministrador<=0){
+   return res.status(400).json({estado:0,mensaje:"Administrador no válido"});
+  }
+
+  if(!Number.isInteger(idReporte)||idReporte<=0){
+   return res.status(400).json({estado:0,mensaje:"Reporte no válido"});
+  }
+
+  if(!titulo||String(titulo).trim()===""){
+   return res.status(400).json({estado:0,mensaje:"El título del reporte es obligatorio"});
+  }
+
+  const tituloLimpio=String(titulo).trim();
+
+  // Validar administrador
+  const [administradores]=await conmysql.query(`
+   SELECT id_usuario
+   FROM usuarios
+   WHERE id_usuario=? AND id_rol=1
+   LIMIT 1
+  `,[idAdministrador]);
+
+  if(administradores.length===0){
+   return res.status(404).json({estado:0,mensaje:"Administrador no encontrado"});
+  }
+
+  // Verificar que el reporte pertenezca a un observador
+  // asociado al administrador en el momento del reporte
+  // y que corresponda al día actual de Ecuador.
+  const [reportes]=await conmysql.query(`
+   SELECT rep.id_reporte,rep.id_usuario,rep.titulo
+   FROM reportes rep
+   INNER JOIN usuarios u
+    ON rep.id_usuario=u.id_usuario
+   INNER JOIN administrador a
+    ON a.id_usuario=rep.id_usuario
+   WHERE rep.id_reporte=?
+    AND a.id_administrador=?
+    AND u.id_rol=2
+    AND rep.fecha_generacion>=a.fecha_inicio
+    AND (a.fecha_fin IS NULL OR rep.fecha_generacion<a.fecha_fin)
+    AND DATE(rep.fecha_generacion)=DATE(
+     CONVERT_TZ(UTC_TIMESTAMP(),'+00:00','-05:00')
+    )
+   LIMIT 1
+  `,[idReporte,idAdministrador]);
+
+  if(reportes.length===0){
+   return res.status(404).json({
+    estado:0,
+    mensaje:"El reporte no existe o no pertenece a uno de sus observadores"
+   });
+  }
+
+  // ÚNICO CAMPO QUE PUEDE MODIFICAR EL ADMINISTRADOR
+  await conmysql.query(`
+   UPDATE reportes
+   SET titulo=?
+   WHERE id_reporte=?
+  `,[tituloLimpio,idReporte]);
+
+  return res.status(200).json({
+   estado:1,
+   mensaje:"Título actualizado correctamente",
+   data:{
+    id_reporte:idReporte,
+    titulo:tituloLimpio
+   }
+  });
+
+ }catch(error){
+  console.error("❌ Error editarTituloReporteAdmin:",error);
+  return res.status(500).json({
+   estado:0,
+   mensaje:"Error al actualizar el título del reporte",
+   error:error.message
+  });
+ }
+};
