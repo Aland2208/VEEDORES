@@ -1,18 +1,18 @@
 import { conmysql } from '../db.js';
 
 /* BUSCAR ADMINISTRADOR POR CORREO */
-export const buscarAdministradorPorCorreo=async(req,res)=>{
-    try{
-        const correo=String(req.query.correo||'').trim().toLowerCase();
+export const buscarAdministradorPorCorreo = async (req, res) => {
+    try {
+        const correo = String(req.query.correo || '').trim().toLowerCase();
 
-        if(!correo){
+        if (!correo) {
             return res.status(400).json({
-                estado:0,
-                mensaje:'El correo electrónico es obligatorio.'
+                estado: 0,
+                mensaje: 'El correo electrónico es obligatorio.'
             });
         }
 
-        const [administradores]=await conmysql.query(`
+        const [administradores] = await conmysql.query(`
             SELECT
                 id_usuario,
                 nombre,
@@ -23,44 +23,44 @@ export const buscarAdministradorPorCorreo=async(req,res)=>{
               AND id_rol=1
               AND estado=1
             LIMIT 1
-        `,[correo]);
+        `, [correo]);
 
-        if(administradores.length===0){
+        if (administradores.length === 0) {
             return res.status(404).json({
-                estado:0,
-                mensaje:'No se encontró un administrador con este correo.'
+                estado: 0,
+                mensaje: 'No se encontró un administrador con este correo.'
             });
         }
 
         return res.status(200).json({
-            estado:1,
-            mensaje:'Administrador encontrado.',
-            data:administradores[0]
+            estado: 1,
+            mensaje: 'Administrador encontrado.',
+            data: administradores[0]
         });
-    }catch(error){
-        console.error('❌ Error buscarAdministradorPorCorreo:',error);
+    } catch (error) {
+        console.error('❌ Error buscarAdministradorPorCorreo:', error);
 
         return res.status(500).json({
-            estado:0,
-            mensaje:'Error al buscar el administrador.'
+            estado: 0,
+            mensaje: 'Error al buscar el administrador.'
         });
     }
 };
 
 
 /* OBTENER ADMINISTRADOR ACTUAL DEL OBSERVADOR */
-export const getAdministradorActual=async(req,res)=>{
-    try{
-        const idUsuario=Number(req.params.id_usuario);
+export const getAdministradorActual = async (req, res) => {
+    try {
+        const idUsuario = Number(req.params.id_usuario);
 
-        if(!Number.isInteger(idUsuario)||idUsuario<=0){
+        if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
             return res.status(400).json({
-                estado:0,
-                mensaje:'Usuario no válido.'
+                estado: 0,
+                mensaje: 'Usuario no válido.'
             });
         }
 
-        const [resultado]=await conmysql.query(`
+        const [resultado] = await conmysql.query(`
             SELECT
                 a.id_asignacion,
                 a.id_administrador,
@@ -76,47 +76,47 @@ export const getAdministradorActual=async(req,res)=>{
               AND u.id_rol=1
               AND u.estado=1
             LIMIT 1
-        `,[idUsuario]);
+        `, [idUsuario]);
 
-        if(resultado.length===0){
+        if (resultado.length === 0) {
             return res.status(200).json({
-                estado:1,
-                vinculado:false,
-                mensaje:'El usuario no tiene un administrador vinculado.',
-                data:null
+                estado: 1,
+                vinculado: false,
+                mensaje: 'El usuario no tiene un administrador vinculado.',
+                data: null
             });
         }
 
         return res.status(200).json({
-            estado:1,
-            vinculado:true,
-            mensaje:'Administrador actual obtenido correctamente.',
-            data:resultado[0]
+            estado: 1,
+            vinculado: true,
+            mensaje: 'Administrador actual obtenido correctamente.',
+            data: resultado[0]
         });
-    }catch(error){
-        console.error('❌ Error getAdministradorActual:',error);
+    } catch (error) {
+        console.error('❌ Error getAdministradorActual:', error);
 
         return res.status(500).json({
-            estado:0,
-            mensaje:'Error al obtener el administrador actual.'
+            estado: 0,
+            mensaje: 'Error al obtener el administrador actual.'
         });
     }
 };
 
 
 /* OBTENER OBSERVADORES ACTUALES DE UN ADMINISTRADOR */
-export const getUsuariosAdministrador=async(req,res)=>{
-    try{
-        const idAdministrador=Number(req.params.id_administrador);
+export const getUsuariosAdministrador = async (req, res) => {
+    try {
+        const idAdministrador = Number(req.params.id_administrador);
 
-        if(!Number.isInteger(idAdministrador)||idAdministrador<=0){
+        if (!Number.isInteger(idAdministrador) || idAdministrador <= 0) {
             return res.status(400).json({
-                estado:0,
-                mensaje:'Administrador no válido.'
+                estado: 0,
+                mensaje: 'Administrador no válido.'
             });
         }
 
-        const [usuarios]=await conmysql.query(`
+        const [usuarios] = await conmysql.query(`
             SELECT
                 a.id_asignacion,
                 a.id_administrador,
@@ -134,28 +134,28 @@ export const getUsuariosAdministrador=async(req,res)=>{
               AND a.fecha_fin IS NULL
               AND u.id_rol=2
             ORDER BY u.nombre ASC,u.apellido ASC
-        `,[idAdministrador]);
+        `, [idAdministrador]);
 
         return res.status(200).json({
-            estado:1,
-            mensaje:'Usuarios obtenidos correctamente.',
-            data:usuarios
+            estado: 1,
+            mensaje: 'Usuarios obtenidos correctamente.',
+            data: usuarios
         });
-    }catch(error){
-        console.error('❌ Error getUsuariosAdministrador:',error);
+    } catch (error) {
+        console.error('❌ Error getUsuariosAdministrador:', error);
 
         return res.status(500).json({
-            estado:0,
-            mensaje:'Error al obtener los usuarios del administrador.'
+            estado: 0,
+            mensaje: 'Error al obtener los usuarios del administrador.'
         });
     }
 };
 
 
 /* OBTENER OBSERVADORES SIN ADMINISTRADOR */
-export const getUsuariosDisponibles=async(req,res)=>{
-    try{
-        const [usuarios]=await conmysql.query(`
+export const getUsuariosDisponibles = async (req, res) => {
+    try {
+        const [usuarios] = await conmysql.query(`
             SELECT
                 u.id_usuario,
                 u.nombre,
@@ -176,75 +176,75 @@ export const getUsuariosDisponibles=async(req,res)=>{
         `);
 
         return res.status(200).json({
-            estado:1,
-            mensaje:'Usuarios disponibles obtenidos correctamente.',
-            data:usuarios
+            estado: 1,
+            mensaje: 'Usuarios disponibles obtenidos correctamente.',
+            data: usuarios
         });
-    }catch(error){
-        console.error('❌ Error getUsuariosDisponibles:',error);
+    } catch (error) {
+        console.error('❌ Error getUsuariosDisponibles:', error);
 
         return res.status(500).json({
-            estado:0,
-            mensaje:'Error al obtener los usuarios disponibles.'
+            estado: 0,
+            mensaje: 'Error al obtener los usuarios disponibles.'
         });
     }
 };
 
 
 /* ASIGNAR OBSERVADOR A ADMINISTRADOR */
-export const asignarUsuario=async(req,res)=>{
-    try{
-        const idAdministrador=Number(req.params.id_administrador);
-        const idUsuario=Number(req.body.id_usuario);
+export const asignarUsuario = async (req, res) => {
+    try {
+        const idAdministrador = Number(req.params.id_administrador);
+        const idUsuario = Number(req.body.id_usuario);
 
-        if(!Number.isInteger(idAdministrador)||idAdministrador<=0||
-           !Number.isInteger(idUsuario)||idUsuario<=0){
+        if (!Number.isInteger(idAdministrador) || idAdministrador <= 0 ||
+            !Number.isInteger(idUsuario) || idUsuario <= 0) {
             return res.status(400).json({
-                estado:0,
-                mensaje:'Administrador o usuario no válido.'
+                estado: 0,
+                mensaje: 'Administrador o usuario no válido.'
             });
         }
 
-        if(idAdministrador===idUsuario){
+        if (idAdministrador === idUsuario) {
             return res.status(400).json({
-                estado:0,
-                mensaje:'Un administrador no puede asignarse a sí mismo.'
+                estado: 0,
+                mensaje: 'Un administrador no puede asignarse a sí mismo.'
             });
         }
 
-        const [administradores]=await conmysql.query(`
+        const [administradores] = await conmysql.query(`
             SELECT id_usuario
             FROM usuarios
             WHERE id_usuario=?
               AND id_rol=1
               AND estado=1
             LIMIT 1
-        `,[idAdministrador]);
+        `, [idAdministrador]);
 
-        if(administradores.length===0){
+        if (administradores.length === 0) {
             return res.status(404).json({
-                estado:0,
-                mensaje:'El administrador no existe o no está activo.'
+                estado: 0,
+                mensaje: 'El administrador no existe o no está activo.'
             });
         }
 
-        const [usuarios]=await conmysql.query(`
+        const [usuarios] = await conmysql.query(`
             SELECT id_usuario
             FROM usuarios
             WHERE id_usuario=?
               AND id_rol=2
               AND estado=1
             LIMIT 1
-        `,[idUsuario]);
+        `, [idUsuario]);
 
-        if(usuarios.length===0){
+        if (usuarios.length === 0) {
             return res.status(404).json({
-                estado:0,
-                mensaje:'El observador no existe o no está activo.'
+                estado: 0,
+                mensaje: 'El observador no existe o no está activo.'
             });
         }
 
-        const [asignaciones]=await conmysql.query(`
+        const [asignaciones] = await conmysql.query(`
             SELECT
                 id_asignacion,
                 id_administrador
@@ -252,17 +252,17 @@ export const asignarUsuario=async(req,res)=>{
             WHERE id_usuario=?
               AND fecha_fin IS NULL
             LIMIT 1
-        `,[idUsuario]);
+        `, [idUsuario]);
 
-        if(asignaciones.length>0){
+        if (asignaciones.length > 0) {
             return res.status(409).json({
-                estado:0,
-                mensaje:'El observador ya tiene un administrador asignado.'
+                estado: 0,
+                mensaje: 'El observador ya tiene un administrador asignado.'
             });
         }
 
         /* HORA DE ECUADOR UTC-5 */
-        const [resultado]=await conmysql.query(`
+        const [resultado] = await conmysql.query(`
             INSERT INTO administrador(
                 id_administrador,
                 id_usuario,
@@ -273,84 +273,84 @@ export const asignarUsuario=async(req,res)=>{
                 ?,
                 DATE_SUB(UTC_TIMESTAMP(),INTERVAL 5 HOUR)
             )
-        `,[idAdministrador,idUsuario]);
+        `, [idAdministrador, idUsuario]);
 
         return res.status(201).json({
-            estado:1,
-            mensaje:'Usuario asignado correctamente.',
-            data:{
-                id_asignacion:resultado.insertId,
-                id_administrador:idAdministrador,
-                id_usuario:idUsuario
+            estado: 1,
+            mensaje: 'Usuario asignado correctamente.',
+            data: {
+                id_asignacion: resultado.insertId,
+                id_administrador: idAdministrador,
+                id_usuario: idUsuario
             }
         });
-    }catch(error){
-        console.error('❌ Error asignarUsuario:',error);
+    } catch (error) {
+        console.error('❌ Error asignarUsuario:', error);
 
         return res.status(500).json({
-            estado:0,
-            mensaje:'Error al asignar el usuario.'
+            estado: 0,
+            mensaje: 'Error al asignar el usuario.'
         });
     }
 };
 
 
 /* REASIGNAR OBSERVADOR A OTRO ADMINISTRADOR */
-export const reasignarUsuario=async(req,res)=>{
+export const reasignarUsuario = async (req, res) => {
     let conexion;
 
-    try{
-        const idUsuario=Number(req.params.id_usuario);
-        const idNuevoAdministrador=Number(req.body.id_administrador);
+    try {
+        const idUsuario = Number(req.params.id_usuario);
+        const idNuevoAdministrador = Number(req.body.id_administrador);
 
-        if(!Number.isInteger(idUsuario)||idUsuario<=0||
-           !Number.isInteger(idNuevoAdministrador)||idNuevoAdministrador<=0){
+        if (!Number.isInteger(idUsuario) || idUsuario <= 0 ||
+            !Number.isInteger(idNuevoAdministrador) || idNuevoAdministrador <= 0) {
             return res.status(400).json({
-                estado:0,
-                mensaje:'Usuario o administrador no válido.'
+                estado: 0,
+                mensaje: 'Usuario o administrador no válido.'
             });
         }
 
-        conexion=await conmysql.getConnection();
+        conexion = await conmysql.getConnection();
         await conexion.beginTransaction();
 
-        const [usuarios]=await conexion.query(`
+        const [usuarios] = await conexion.query(`
             SELECT id_usuario
             FROM usuarios
             WHERE id_usuario=?
               AND id_rol=2
               AND estado=1
             LIMIT 1
-        `,[idUsuario]);
+        `, [idUsuario]);
 
-        if(usuarios.length===0){
+        if (usuarios.length === 0) {
             await conexion.rollback();
 
             return res.status(404).json({
-                estado:0,
-                mensaje:'El observador no existe o no está activo.'
+                estado: 0,
+                mensaje: 'El observador no existe o no está activo.'
             });
         }
 
-        const [administradores]=await conexion.query(`
+        const [administradores] = await conexion.query(`
             SELECT id_usuario
             FROM usuarios
             WHERE id_usuario=?
               AND id_rol=1
               AND estado=1
             LIMIT 1
-        `,[idNuevoAdministrador]);
+        `, [idNuevoAdministrador]);
 
-        if(administradores.length===0){
+        if (administradores.length === 0) {
             await conexion.rollback();
 
             return res.status(404).json({
-                estado:0,
-                mensaje:'El nuevo administrador no existe o no está activo.'
+                estado: 0,
+                mensaje: 'El nuevo administrador no existe o no está activo.'
             });
         }
 
-        const [actual]=await conexion.query(`
+        const [actual] = await conexion.query(`
             SELECT
                 id_asignacion,
                 id_administrador
@@ -358,17 +358,17 @@ export const reasignarUsuario=async(req,res)=>{
             WHERE id_usuario=?
               AND fecha_fin IS NULL
             FOR UPDATE
-        `,[idUsuario]);
+        `, [idUsuario]);
 
-        if(
-            actual.length>0 &&
-            Number(actual[0].id_administrador)===idNuevoAdministrador
-        ){
+        if (
+            actual.length > 0 &&
+            Number(actual[0].id_administrador) === idNuevoAdministrador
+        ) {
             await conexion.rollback();
 
             return res.status(409).json({
-                estado:0,
-                mensaje:'El usuario ya pertenece a este administrador.'
+                estado: 0,
+                mensaje: 'El usuario ya pertenece a este administrador.'
             });
         }
 
@@ -377,7 +377,7 @@ export const reasignarUsuario=async(req,res)=>{
          * La misma fecha se utiliza para cerrar la asignación
          * anterior y comenzar la nueva.
          */
-        const [fecha]=await conexion.query(`
+        const [fecha] = await conexion.query(`
             SELECT
                 DATE_SUB(
                     UTC_TIMESTAMP(),
@@ -385,51 +385,51 @@ export const reasignarUsuario=async(req,res)=>{
                 ) AS fecha_cambio
         `);
 
-        const fechaCambio=fecha[0].fecha_cambio;
+        const fechaCambio = fecha[0].fecha_cambio;
 
         /* CERRAR ASIGNACIÓN ANTERIOR */
-        if(actual.length>0){
+        if (actual.length > 0) {
             await conexion.query(`
                 UPDATE administrador
                 SET fecha_fin=?
                 WHERE id_asignacion=?
-            `,[fechaCambio,actual[0].id_asignacion]);
+            `, [fechaCambio, actual[0].id_asignacion]);
         }
 
         /* CREAR NUEVA ASIGNACIÓN */
-        const [resultado]=await conexion.query(`
+        const [resultado] = await conexion.query(`
             INSERT INTO administrador(
                 id_administrador,
                 id_usuario,
                 fecha_inicio
             )
             VALUES(?,?,?)
-        `,[idNuevoAdministrador,idUsuario,fechaCambio]);
+        `, [idNuevoAdministrador, idUsuario, fechaCambio]);
 
         await conexion.commit();
 
         return res.status(200).json({
-            estado:1,
-            mensaje:'Usuario reasignado correctamente.',
-            data:{
-                id_asignacion:resultado.insertId,
-                id_administrador:idNuevoAdministrador,
-                id_usuario:idUsuario
+            estado: 1,
+            mensaje: 'Usuario reasignado correctamente.',
+            data: {
+                id_asignacion: resultado.insertId,
+                id_administrador: idNuevoAdministrador,
+                id_usuario: idUsuario
             }
         });
-    }catch(error){
-        if(conexion){
+    } catch (error) {
+        if (conexion) {
             await conexion.rollback();
         }
 
-        console.error('❌ Error reasignarUsuario:',error);
+        console.error('❌ Error reasignarUsuario:', error);
 
         return res.status(500).json({
-            estado:0,
-            mensaje:'Error al reasignar el usuario.'
+            estado: 0,
+            mensaje: 'Error al reasignar el usuario.'
         });
-    }finally{
-        if(conexion){
+    } finally {
+        if (conexion) {
             conexion.release();
         }
     }
@@ -437,20 +437,20 @@ export const reasignarUsuario=async(req,res)=>{
 
 
 /* FINALIZAR ASIGNACIÓN ACTUAL */
-export const quitarUsuarioAdministrador=async(req,res)=>{
-    try{
-        const idAdministrador=Number(req.params.id_administrador);
-        const idUsuario=Number(req.params.id_usuario);
+export const quitarUsuarioAdministrador = async (req, res) => {
+    try {
+        const idAdministrador = Number(req.params.id_administrador);
+        const idUsuario = Number(req.params.id_usuario);
 
-        if(!Number.isInteger(idAdministrador)||idAdministrador<=0||
-           !Number.isInteger(idUsuario)||idUsuario<=0){
+        if (!Number.isInteger(idAdministrador) || idAdministrador <= 0 ||
+            !Number.isInteger(idUsuario) || idUsuario <= 0) {
             return res.status(400).json({
-                estado:0,
-                mensaje:'Administrador o usuario no válido.'
+                estado: 0,
+                mensaje: 'Administrador o usuario no válido.'
             });
         }
 
-        const [resultado]=await conmysql.query(`
+        const [resultado] = await conmysql.query(`
             UPDATE administrador
             SET fecha_fin=
                 DATE_SUB(
@@ -460,43 +460,43 @@ export const quitarUsuarioAdministrador=async(req,res)=>{
             WHERE id_administrador=?
               AND id_usuario=?
               AND fecha_fin IS NULL
-        `,[idAdministrador,idUsuario]);
+        `, [idAdministrador, idUsuario]);
 
-        if(resultado.affectedRows===0){
+        if (resultado.affectedRows === 0) {
             return res.status(404).json({
-                estado:0,
-                mensaje:'No existe una asignación activa para este usuario.'
+                estado: 0,
+                mensaje: 'No existe una asignación activa para este usuario.'
             });
         }
 
         return res.status(200).json({
-            estado:1,
-            mensaje:'Asignación finalizada correctamente.'
+            estado: 1,
+            mensaje: 'Asignación finalizada correctamente.'
         });
-    }catch(error){
-        console.error('❌ Error quitarUsuarioAdministrador:',error);
+    } catch (error) {
+        console.error('❌ Error quitarUsuarioAdministrador:', error);
 
         return res.status(500).json({
-            estado:0,
-            mensaje:'Error al finalizar la asignación.'
+            estado: 0,
+            mensaje: 'Error al finalizar la asignación.'
         });
     }
 };
 
 
 /* HISTORIAL DE ADMINISTRADORES DE UN OBSERVADOR */
-export const getHistorialUsuario=async(req,res)=>{
-    try{
-        const idUsuario=Number(req.params.id_usuario);
+export const getHistorialUsuario = async (req, res) => {
+    try {
+        const idUsuario = Number(req.params.id_usuario);
 
-        if(!Number.isInteger(idUsuario)||idUsuario<=0){
+        if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
             return res.status(400).json({
-                estado:0,
-                mensaje:'Usuario no válido.'
+                estado: 0,
+                mensaje: 'Usuario no válido.'
             });
         }
 
-        const [historial]=await conmysql.query(`
+        const [historial] = await conmysql.query(`
             SELECT
                 a.id_asignacion,
                 a.id_administrador,
@@ -518,19 +518,19 @@ export const getHistorialUsuario=async(req,res)=>{
                 ON u.id_usuario=a.id_administrador
             WHERE a.id_usuario=?
             ORDER BY a.fecha_inicio DESC
-        `,[idUsuario]);
+        `, [idUsuario]);
 
         return res.status(200).json({
-            estado:1,
-            mensaje:'Historial obtenido correctamente.',
-            data:historial
+            estado: 1,
+            mensaje: 'Historial obtenido correctamente.',
+            data: historial
         });
-    }catch(error){
-        console.error('❌ Error getHistorialUsuario:',error);
+    } catch (error) {
+        console.error('❌ Error getHistorialUsuario:', error);
 
         return res.status(500).json({
-            estado:0,
-            mensaje:'Error al obtener el historial.'
+            estado: 0,
+            mensaje: 'Error al obtener el historial.'
         });
     }
 };
@@ -538,35 +538,35 @@ export const getHistorialUsuario=async(req,res)=>{
 // ======================================================
 // HISTORIAL - VEEDORES RELACIONADOS CON ADMINISTRADOR
 // ======================================================
-export const getVeedoresHistorial=async(req,res)=>{
- try{
-  const idAdministrador=Number(req.params.id_administrador);
+export const getVeedoresHistorial = async (req, res) => {
+    try {
+        const idAdministrador = Number(req.params.id_administrador);
 
-  if(!Number.isInteger(idAdministrador)||idAdministrador<=0){
-   return res.status(400).json({
-    estado:0,
-    mensaje:"Administrador no válido"
-   });
-  }
+        if (!Number.isInteger(idAdministrador) || idAdministrador <= 0) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Administrador no válido"
+            });
+        }
 
-  // VALIDAR ADMINISTRADOR
-  const [administradores]=await conmysql.query(`
+        // VALIDAR ADMINISTRADOR
+        const [administradores] = await conmysql.query(`
    SELECT id_usuario,nombre,apellido,correo
    FROM usuarios
    WHERE id_usuario=? AND id_rol=1
    LIMIT 1
-  `,[idAdministrador]);
+  `, [idAdministrador]);
 
-  if(administradores.length===0){
-   return res.status(404).json({
-    estado:0,
-    mensaje:"Administrador no encontrado"
-   });
-  }
+        if (administradores.length === 0) {
+            return res.status(404).json({
+                estado: 0,
+                mensaje: "Administrador no encontrado"
+            });
+        }
 
-  // OBTENER TODOS LOS VEEDORES QUE HAN ESTADO
-  // RELACIONADOS CON ESTE ADMINISTRADOR
-  const [veedores]=await conmysql.query(`
+        // OBTENER TODOS LOS VEEDORES QUE HAN ESTADO
+        // RELACIONADOS CON ESTE ADMINISTRADOR
+        const [veedores] = await conmysql.query(`
    SELECT
     u.id_usuario,
     u.nombre,
@@ -631,99 +631,99 @@ export const getVeedoresHistorial=async(req,res)=>{
     relacion_actual DESC,
     u.nombre ASC,
     u.apellido ASC
-  `,[idAdministrador]);
+  `, [idAdministrador]);
 
-  return res.status(200).json({
-   estado:1,
-   mensaje:"Veedores del historial obtenidos correctamente",
-   administrador:administradores[0],
-   cantidad:veedores.length,
-   data:veedores
-  });
+        return res.status(200).json({
+            estado: 1,
+            mensaje: "Veedores del historial obtenidos correctamente",
+            administrador: administradores[0],
+            cantidad: veedores.length,
+            data: veedores
+        });
 
- }catch(error){
-  console.error("❌ Error getVeedoresHistorial:",error);
+    } catch (error) {
+        console.error("❌ Error getVeedoresHistorial:", error);
 
-  return res.status(500).json({
-   estado:0,
-   mensaje:"Error al obtener el historial de veedores",
-   error:error.message
-  });
- }
+        return res.status(500).json({
+            estado: 0,
+            mensaje: "Error al obtener el historial de veedores",
+            error: error.message
+        });
+    }
 };
 
 // ======================================================
 // HISTORIAL - REPORTES DE UN VEEDOR
 // ======================================================
-export const getReportesHistorialVeedor=async(req,res)=>{
- try{
-  const idAdministrador=Number(req.params.id_administrador);
-  const idUsuario=Number(req.params.id_usuario);
+export const getReportesHistorialVeedor = async (req, res) => {
+    try {
+        const idAdministrador = Number(req.params.id_administrador);
+        const idUsuario = Number(req.params.id_usuario);
 
-  if(!Number.isInteger(idAdministrador)||idAdministrador<=0){
-   return res.status(400).json({
-    estado:0,
-    mensaje:"Administrador no válido"
-   });
-  }
+        if (!Number.isInteger(idAdministrador) || idAdministrador <= 0) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Administrador no válido"
+            });
+        }
 
-  if(!Number.isInteger(idUsuario)||idUsuario<=0){
-   return res.status(400).json({
-    estado:0,
-    mensaje:"Veedor no válido"
-   });
-  }
+        if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Veedor no válido"
+            });
+        }
 
-  // VALIDAR ADMINISTRADOR
-  const [administradores]=await conmysql.query(`
+        // VALIDAR ADMINISTRADOR
+        const [administradores] = await conmysql.query(`
    SELECT id_usuario,nombre,apellido,correo
    FROM usuarios
    WHERE id_usuario=? AND id_rol=1
    LIMIT 1
-  `,[idAdministrador]);
+  `, [idAdministrador]);
 
-  if(administradores.length===0){
-   return res.status(404).json({
-    estado:0,
-    mensaje:"Administrador no encontrado"
-   });
-  }
+        if (administradores.length === 0) {
+            return res.status(404).json({
+                estado: 0,
+                mensaje: "Administrador no encontrado"
+            });
+        }
 
-  // VALIDAR QUE EL VEEDOR HAYA ESTADO RELACIONADO
-  // CON ESTE ADMINISTRADOR
-  const [relaciones]=await conmysql.query(`
+        // VALIDAR QUE EL VEEDOR HAYA ESTADO RELACIONADO
+        // CON ESTE ADMINISTRADOR
+        const [relaciones] = await conmysql.query(`
    SELECT id_asignacion
    FROM administrador
    WHERE id_administrador=?
     AND id_usuario=?
    LIMIT 1
-  `,[idAdministrador,idUsuario]);
+  `, [idAdministrador, idUsuario]);
 
-  if(relaciones.length===0){
-   return res.status(403).json({
-    estado:0,
-    mensaje:"El veedor no pertenece ni ha pertenecido a este administrador"
-   });
-  }
+        if (relaciones.length === 0) {
+            return res.status(403).json({
+                estado: 0,
+                mensaje: "El veedor no pertenece ni ha pertenecido a este administrador"
+            });
+        }
 
-  // INFORMACIÓN DEL VEEDOR
-  const [veedores]=await conmysql.query(`
+        // INFORMACIÓN DEL VEEDOR
+        const [veedores] = await conmysql.query(`
    SELECT id_usuario,nombre,apellido,correo,estado
    FROM usuarios
    WHERE id_usuario=? AND id_rol=2
    LIMIT 1
-  `,[idUsuario]);
+  `, [idUsuario]);
 
-  if(veedores.length===0){
-   return res.status(404).json({
-    estado:0,
-    mensaje:"Veedor no encontrado"
-   });
-  }
+        if (veedores.length === 0) {
+            return res.status(404).json({
+                estado: 0,
+                mensaje: "Veedor no encontrado"
+            });
+        }
 
-  // OBTENER TODOS LOS REPORTES QUE FUERON GENERADOS
-  // MIENTRAS EL VEEDOR PERTENECÍA A ESTE ADMINISTRADOR
-  const [reportes]=await conmysql.query(`
+        // OBTENER TODOS LOS REPORTES QUE FUERON GENERADOS
+        // MIENTRAS EL VEEDOR PERTENECÍA A ESTE ADMINISTRADOR
+        const [reportes] = await conmysql.query(`
    SELECT DISTINCT
     rep.id_reporte,
     rep.id_captura,
@@ -808,43 +808,188 @@ export const getReportesHistorialVeedor=async(req,res)=>{
 
    ORDER BY
     rep.fecha_generacion DESC
-  `,[idUsuario,idAdministrador]);
+  `, [idUsuario, idAdministrador]);
 
-  const completos=reportes.filter(
-   reporte=>reporte.estado_reporte==="Completo"
-  ).length;
+        const completos = reportes.filter(
+            reporte => reporte.estado_reporte === "Completo"
+        ).length;
 
-  const incompletos=reportes.filter(
-   reporte=>reporte.estado_reporte==="Incompleto"
-  ).length;
+        const incompletos = reportes.filter(
+            reporte => reporte.estado_reporte === "Incompleto"
+        ).length;
 
-  return res.status(200).json({
-   estado:1,
-   mensaje:"Historial del veedor obtenido correctamente",
+        return res.status(200).json({
+            estado: 1,
+            mensaje: "Historial del veedor obtenido correctamente",
 
-   administrador:administradores[0],
+            administrador: administradores[0],
 
-   veedor:veedores[0],
+            veedor: veedores[0],
 
-   resumen:{
-    total:reportes.length,
-    completos,
-    incompletos
-   },
+            resumen: {
+                total: reportes.length,
+                completos,
+                incompletos
+            },
 
-   data:reportes
-  });
+            data: reportes
+        });
 
- }catch(error){
-  console.error(
-   "❌ Error getReportesHistorialVeedor:",
-   error
-  );
+    } catch (error) {
+        console.error(
+            "❌ Error getReportesHistorialVeedor:",
+            error
+        );
 
-  return res.status(500).json({
-   estado:0,
-   mensaje:"Error al obtener los reportes del veedor",
-   error:error.message
-  });
- }
+        return res.status(500).json({
+            estado: 0,
+            mensaje: "Error al obtener los reportes del veedor",
+            error: error.message
+        });
+    }
+};
+
+/* ======================================================
+   CONFIGURAR / ACTUALIZAR URL DE CÁMARA (ADMINISTRADOR)
+====================================================== */
+export const guardarUrlCamaraAdmin = async (req, res) => {
+    try {
+        const idAdministrador = Number(req.body.id_administrador);
+        let urlCamara = String(req.body.url_camara || '').trim();
+
+        if (!Number.isInteger(idAdministrador) || idAdministrador <= 0 || !urlCamara) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: 'El ID del administrador y la URL son obligatorios.'
+            });
+        }
+
+        // Limpiar diagonales finales
+        urlCamara = urlCamara.replace(/\/+$/, '');
+
+        // Validar que el usuario sea administrador activo (id_rol = 1)
+        const [admin] = await conmysql.query(
+            `SELECT id_usuario FROM usuarios WHERE id_usuario = ? AND id_rol = 1 AND estado = 1 LIMIT 1`,
+            [idAdministrador]
+        );
+
+        if (admin.length === 0) {
+            return res.status(403).json({
+                estado: 0,
+                mensaje: 'Solo un administrador activo puede configurar la cámara.'
+            });
+        }
+
+        // Insertar o actualizar la URL (Hora de Ecuador UTC-5)
+        await conmysql.query(
+            `INSERT INTO configuracion_camara (id_administrador, url_camara, fecha_actualizacion)
+             VALUES (?, ?, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR))
+             ON DUPLICATE KEY UPDATE 
+                url_camara = VALUES(url_camara),
+                fecha_actualizacion = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)`,
+            [idAdministrador, urlCamara]
+        );
+
+        return res.status(200).json({
+            estado: 1,
+            mensaje: 'Cámara activada para todos los veedores asignados a tu cuenta.',
+            data: { url_camara: urlCamara }
+        });
+    } catch (error) {
+        console.error('❌ Error guardarUrlCamaraAdmin:', error);
+        return res.status(500).json({
+            estado: 0,
+            mensaje: 'Error del servidor al configurar la cámara.'
+        });
+    }
+};
+
+
+/* ======================================================
+   OBTENER URL DE CÁMARA VINCULADA
+   (Para Administrador o Veedor asignado)
+====================================================== */
+export const obtenerUrlCamaraVinculada = async (req, res) => {
+    try {
+        const idUsuario = Number(req.params.id_usuario);
+
+        if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: 'Usuario no válido.'
+            });
+        }
+
+        // 1. Obtener datos del usuario
+        const [usuario] = await conmysql.query(
+            `SELECT id_usuario, id_rol FROM usuarios WHERE id_usuario = ? AND estado = 1 LIMIT 1`,
+            [idUsuario]
+        );
+
+        if (usuario.length === 0) {
+            return res.status(404).json({
+                estado: 0,
+                mensaje: 'Usuario no encontrado o inactivo.'
+            });
+        }
+
+        let idAdminObjetivo = null;
+
+        if (usuario[0].id_rol === 1) {
+            // Es Administrador: busca su propia cámara
+            idAdminObjetivo = usuario[0].id_usuario;
+        } else {
+            // Es Veedor: busca su Administrador activo en la tabla `administrador`
+            const [asignacion] = await conmysql.query(
+                `SELECT id_administrador 
+                 FROM administrador 
+                 WHERE id_usuario = ? AND fecha_fin IS NULL 
+                 ORDER BY fecha_inicio DESC 
+                 LIMIT 1`,
+                [idUsuario]
+            );
+
+            if (asignacion.length > 0) {
+                idAdminObjetivo = asignacion[0].id_administrador;
+            }
+        }
+
+        // Si es veedor y no tiene administrador vinculado
+        if (!idAdminObjetivo) {
+            return res.status(200).json({
+                estado: 1,
+                url_camara: null,
+                mensaje: 'El veedor no tiene un administrador asignado.'
+            });
+        }
+
+        // 2. Consultar la URL configurada por ese Administrador
+        const [config] = await conmysql.query(
+            `SELECT url_camara, fecha_actualizacion 
+             FROM configuracion_camara 
+             WHERE id_administrador = ? 
+             LIMIT 1`,
+            [idAdminObjetivo]
+        );
+
+        if (config.length === 0 || !config[0].url_camara) {
+            return res.status(200).json({
+                estado: 1,
+                url_camara: null,
+                mensaje: 'El administrador aún no ha habilitado la cámara.'
+            });
+        }
+
+        return res.status(200).json({
+            estado: 1,
+            url_camara: config[0].url_camara,
+            fecha_actualizacion: config[0].fecha_actualizacion
+        });
+    } catch (error) {
+        console.error('❌ Error obtenerUrlCamaraVinculada:', error);
+        return res.status(500).json({
+            estado: 0,
+            mensaje: 'Error del servidor al obtener la cámara vinculada.'
+        });
+    }
 };
