@@ -10,7 +10,9 @@ import {
     getHistorialUsuario,
     getAdministradorActual,
     getVeedoresHistorial,
-    getReportesHistorialVeedor
+    getReportesHistorialVeedor,
+    guardarUrlCamaraAdmin,
+    obtenerUrlCamaraVinculada
 } from '../controladores/administradorC.js';
 
 const router = Router();
@@ -27,5 +29,8 @@ router.get('/actual/:id_usuario', getAdministradorActual);
 
 router.get("/:id_administrador/veedores/historial", getVeedoresHistorial);
 router.get("/:id_administrador/veedores/:id_usuario/reportes", getReportesHistorialVeedor);
+
+router.post('/config/url-camara', guardarUrlCamaraAdmin);
+router.get('/config/url-camara/:id_usuario', obtenerUrlCamaraVinculada);
 
 export default router;
