@@ -11,16 +11,53 @@ const TIEMPO_BLOQUEO = 15 * 60 * 1000;
 const intentosLogin = new Map();
 
 // ==========================================
+// EXPRESIÓN REGULAR PARA NOMBRES REALES
+// Solo letras (incluye tildes, ñ, ü) y espacios simples.
+// Mínimo 2 letras por palabra.
+// ==========================================
+const regexNombreValido = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]{2,}(?: [a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]{2,})*$/;
+
+// ==========================================
 // REGISTRAR USUARIO
 // ==========================================
 export const registrarUsuario = async (req, res) => {
     try {
-        const { nombre, apellido, correo, password, id_rol } = req.body;
+        let { nombre, apellido, correo, password, id_rol } = req.body;
 
+        nombre = String(nombre || '').trim();
+        apellido = String(apellido || '').trim();
+        correo = String(correo || '').trim().toLowerCase();
+
+        // 1. Validar campos obligatorios
         if (!nombre || !apellido || !correo || !password) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "Faltan datos obligatorios."
+                mensaje: "Todos los campos son obligatorios."
+            });
+        }
+
+        // 2. Validar que el nombre sea auténtico
+        if (!regexNombreValido.test(nombre)) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "El nombre no es válido. Solo se permiten letras (mínimo 2 caracteres)."
+            });
+        }
+
+        // 3. Validar que el apellido sea auténtico
+        if (!regexNombreValido.test(apellido)) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "El apellido no es válido. Solo se permiten letras (mínimo 2 caracteres)."
+            });
+        }
+
+        // 4. Validar formato de correo
+        const regexCorreo = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
+        if (!regexCorreo.test(correo)) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Ingrese un correo electrónico válido."
             });
         }
 
@@ -28,8 +65,8 @@ export const registrarUsuario = async (req, res) => {
         const hash = await bcrypt.hash(password, salt);
 
         const [resultado] = await conmysql.query(
-            `INSERT INTO usuarios (nombre,apellido,correo,password_hash,id_rol)
-    VALUES (?,?,?,?,?)`,
+            `INSERT INTO usuarios (nombre, apellido, correo, password_hash, id_rol)
+             VALUES (?, ?, ?, ?, ?)`,
             [nombre, apellido, correo, hash, id_rol || 2]
         );
 
@@ -40,7 +77,7 @@ export const registrarUsuario = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("❌ Error registrarUsuario:", error);
 
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({
@@ -126,7 +163,7 @@ export const loginUsuario = async (req, res) => {
 
             datos.intentos++;
 
-            // Bloquear después de 5 intentos
+            // Bloquear después de 3 intentos
             if (datos.intentos >= MAX_INTENTOS) {
                 datos.bloqueadoHasta = Date.now() + TIEMPO_BLOQUEO;
 
@@ -204,8 +241,8 @@ export const solicitarRecuperacion = async (req, res) => {
 
         const [resultado] = await conmysql.query(
             `UPDATE usuarios
-    SET reset_token=?,reset_token_expira=?
-    WHERE correo=?`,
+             SET reset_token=?, reset_token_expira=?
+             WHERE correo=?`,
             [tokenRecuperacion, fechaExpira, correo]
         );
 
@@ -239,7 +276,6 @@ export const solicitarRecuperacion = async (req, res) => {
                         }
                     ],
                     subject: "Recuperación de contraseña | VIGÍA",
-
                     htmlContent: `
 <!DOCTYPE html>
 <html lang="es">
@@ -438,7 +474,7 @@ export const solicitarRecuperacion = async (req, res) => {
            font-size:21px;
            vertical-align:top;
           ">
-          ◷
+           ◷
          </td>
 
          <td style="
@@ -544,7 +580,6 @@ export const solicitarRecuperacion = async (req, res) => {
 
         if (!respuestaBrevo.ok) {
             const errorData = await respuestaBrevo.json();
-
             console.error('❌ Error de Brevo:', errorData);
 
             return res.status(500).json({
@@ -585,9 +620,9 @@ export const restablecerPassword = async (req, res) => {
 
         const [usuarios] = await conmysql.query(
             `SELECT *
-    FROM usuarios
-    WHERE reset_token=?
-    AND reset_token_expira>?`,
+             FROM usuarios
+             WHERE reset_token=?
+             AND reset_token_expira>?`,
             [token, ahora]
         );
 
@@ -605,10 +640,10 @@ export const restablecerPassword = async (req, res) => {
 
         await conmysql.query(
             `UPDATE usuarios
-    SET password_hash=?,
-        reset_token=NULL,
-        reset_token_expira=NULL
-    WHERE id_usuario=?`,
+             SET password_hash=?,
+                 reset_token=NULL,
+                 reset_token_expira=NULL
+             WHERE id_usuario=?`,
             [hash, id_usuario]
         );
 
@@ -652,9 +687,9 @@ export const obtenerPerfil = async (req, res) => {
 
         const [usuarios] = await conmysql.query(
             `SELECT id_usuario,nombre,apellido,correo
-    FROM usuarios
-    WHERE id_usuario=? AND estado=1
-    LIMIT 1`,
+             FROM usuarios
+             WHERE id_usuario=? AND estado=1
+             LIMIT 1`,
             [idUsuario]
         );
 
@@ -707,6 +742,22 @@ export const actualizarPerfil = async (req, res) => {
             });
         }
 
+        // Validar formato de nombre auténtico
+        if (!regexNombreValido.test(nombre)) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "El nombre no es válido. Solo se permiten letras (mínimo 2 caracteres)."
+            });
+        }
+
+        // Validar formato de apellido auténtico
+        if (!regexNombreValido.test(apellido)) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "El apellido no es válido. Solo se permiten letras (mínimo 2 caracteres)."
+            });
+        }
+
         if (nombre.length > 100) {
             return res.status(400).json({
                 estado: 0,
@@ -728,8 +779,7 @@ export const actualizarPerfil = async (req, res) => {
             });
         }
 
-        const correoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
+        const correoValido = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
         if (!correoValido.test(correo)) {
             return res.status(400).json({
                 estado: 0,
@@ -739,9 +789,9 @@ export const actualizarPerfil = async (req, res) => {
 
         const [usuarios] = await conmysql.query(
             `SELECT id_usuario
-    FROM usuarios
-    WHERE id_usuario=? AND estado=1
-    LIMIT 1`,
+             FROM usuarios
+             WHERE id_usuario=? AND estado=1
+             LIMIT 1`,
             [idUsuario]
         );
 
@@ -754,9 +804,9 @@ export const actualizarPerfil = async (req, res) => {
 
         const [correoExistente] = await conmysql.query(
             `SELECT id_usuario
-    FROM usuarios
-    WHERE correo=? AND id_usuario<>?
-    LIMIT 1`,
+             FROM usuarios
+             WHERE correo=? AND id_usuario<>?
+             LIMIT 1`,
             [correo, idUsuario]
         );
 
@@ -769,8 +819,8 @@ export const actualizarPerfil = async (req, res) => {
 
         await conmysql.query(
             `UPDATE usuarios
-    SET nombre=?,apellido=?,correo=?
-    WHERE id_usuario=?`,
+             SET nombre=?, apellido=?, correo=?
+             WHERE id_usuario=?`,
             [nombre, apellido, correo, idUsuario]
         );
 
@@ -826,9 +876,9 @@ export const cambiarPassword = async (req, res) => {
 
         const [usuarios] = await conmysql.query(
             `SELECT id_usuario,password_hash
-    FROM usuarios
-    WHERE id_usuario=? AND estado=1
-    LIMIT 1`,
+             FROM usuarios
+             WHERE id_usuario=? AND estado=1
+             LIMIT 1`,
             [idUsuario]
         );
 
@@ -873,8 +923,8 @@ export const cambiarPassword = async (req, res) => {
 
         await conmysql.query(
             `UPDATE usuarios
-    SET password_hash=?
-    WHERE id_usuario=?`,
+             SET password_hash=?
+             WHERE id_usuario=?`,
             [nuevoHash, idUsuario]
         );
 
@@ -915,10 +965,9 @@ export const validarTokenRecuperacion = async (req, res) => {
 
         const [usuarios] = await conmysql.query(
             `SELECT id_usuario
-    FROM usuarios
-    WHERE reset_token=?
-    AND reset_token_expira>?
-    LIMIT 1`,
+             FROM usuarios
+             WHERE reset_token=?
+             AND reset_token_expira>?`,
             [token, ahora]
         );
 
