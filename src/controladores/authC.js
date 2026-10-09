@@ -17,7 +17,13 @@ const palabrasProhibidas = [
     'mama', 'tanga', 'papa', 'culo', 'puta', 'puto', 'mierda', 'verga', 'pito',
     'pendejo', 'pendeja', 'idiota', 'maricon', 'perra', 'perro', 'chucha', 'hdp',
     'admin', 'administrador', 'root', 'test', 'prueba', 'usuario', 'null', 'undefined',
-    'anonimo', 'nobody', 'fake', 'bot', 'observador', 'veedor'
+    'anonimo', 'nobody', 'fake', 'bot', 'observador', 'veedor', 'tonto', 'bobo', 'loco'
+];
+
+const dominiosValidosBackend = [
+    'gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'yahoo.es',
+    'icloud.com', 'live.com', 'msn.com', 'upse.edu.ec', 'ug.edu.ec',
+    'espe.edu.ec', 'epn.edu.ec', 'outlook.es', 'protonmail.com', 'mail.com'
 ];
 
 const esNombreValidoBackend = (texto) => {
@@ -25,7 +31,6 @@ const esNombreValidoBackend = (texto) => {
 
     if (limpio.length < 2 || limpio.length > 30) return false;
 
-    // Solo letras y espacios
     const regexLetras = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+(?: [a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+)*$/;
     if (!regexLetras.test(limpio)) return false;
 
@@ -39,28 +44,20 @@ const esNombreValidoBackend = (texto) => {
         const pSinTildes = pLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
         if (palabrasProhibidas.includes(pSinTildes)) return false;
-
-        // 3 letras repetidas consecutivas
         if (/([a-záéíóúñü])\1\1/i.test(pLower)) return false;
 
-        // Debe contener al menos una vocal
         const vocales = pLower.match(/[aeiouáéíóúü]/g) || [];
         if (vocales.length === 0) return false;
 
-        // Proporción equilibrada de vocales en palabras largas
         if (palabra.length >= 6) {
             const porcentajeVocales = vocales.length / palabra.length;
             if (porcentajeVocales < 0.25 || porcentajeVocales > 0.70) return false;
         }
 
-        // 3 consonantes o 3 vocales consecutivas
         if (/[bcdfghjklmnñpqrstvwxyz]{3,}/i.test(pLower)) return false;
         if (/[aeiouáéíóúü]{3,}/i.test(pLower)) return false;
-
-        // Combinaciones de teclado comunes en teclazos
         if (/(jd|dj|jn|nj|dn|nd|ed|fn|nf|bf|fb|ubf|fub|bbu|ffu|qj|xj|zx|jk|kj|wq|qw|fg|gf|vb|bv|bp|pb)/i.test(pLower)) return false;
 
-        // Máximo 2 veces la misma consonante por palabra
         const conteoLetras = {};
         for (const char of pLower) {
             if (!'aeiouáéíóúü'.includes(char)) {
@@ -69,9 +66,39 @@ const esNombreValidoBackend = (texto) => {
             }
         }
 
-        // Bucles repetitivos
         if (/(.{2,4})\1/i.test(pLower) && palabra.length > 8) return false;
     }
+
+    return true;
+};
+
+// ==========================================
+// VALIDACIÓN ESTRICTA DE CORREO (BACKEND)
+// ==========================================
+const esCorreoValidoBackend = (correo) => {
+    const limpio = String(correo || '').trim().toLowerCase();
+    const regexEmail = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!regexEmail.test(limpio)) return false;
+
+    const partes = limpio.split('@');
+    if (partes.length !== 2) return false;
+
+    const usuario = partes[0];
+    const dominio = partes[1];
+
+    if (usuario.length < 3 || usuario.length > 40) return false;
+    if (/(.)\1\1\1/.test(usuario)) return false;
+
+    if (dominiosValidosBackend.includes(dominio)) {
+        return true;
+    }
+
+    const nombreDominio = dominio.split('.')[0];
+    if (nombreDominio.length < 3 || nombreDominio.length > 20) return false;
+    if (/[bcdfghjklmnpqrstvwxyz]{4,}/.test(nombreDominio)) return false;
+    if (/[aeiou]{4,}/.test(nombreDominio)) return false;
+    if (/(.)\1\1/.test(nombreDominio)) return false;
+    if (/(fj|jf|hj|jh|eu|ue|uf|fu|eu|ui){3,}/.test(nombreDominio)) return false;
 
     return true;
 };
@@ -111,16 +138,15 @@ export const registrarUsuario = async (req, res) => {
             });
         }
 
-        // 4. Validar formato de correo
-        const regexCorreo = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
-        if (!regexCorreo.test(correo)) {
+        // 4. Validar formato y dominio de correo
+        if (!esCorreoValidoBackend(correo)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "Ingrese un correo electrónico válido."
+                mensaje: "El correo electrónico no es válido o proviene de un dominio no admitido."
             });
         }
 
-        // Normalizar capitalización (Primera letra Mayúscula por palabra)
+        // Normalizar capitalización
         const formatearPalabra = (str) =>
             str.split(' ').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
 
@@ -583,7 +609,6 @@ export const actualizarPerfil = async (req, res) => {
             });
         }
 
-        // Validar formato de nombre auténtico
         if (!esNombreValidoBackend(nombre)) {
             return res.status(400).json({
                 estado: 0,
@@ -591,7 +616,6 @@ export const actualizarPerfil = async (req, res) => {
             });
         }
 
-        // Validar formato de apellido auténtico
         if (!esNombreValidoBackend(apellido)) {
             return res.status(400).json({
                 estado: 0,
@@ -599,11 +623,10 @@ export const actualizarPerfil = async (req, res) => {
             });
         }
 
-        const correoValido = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
-        if (!correoValido.test(correo)) {
+        if (!esCorreoValidoBackend(correo)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "Ingrese un correo electrónico válido."
+                mensaje: "El correo electrónico no es válido o proviene de un dominio no admitido."
             });
         }
 
