@@ -11,11 +11,39 @@ const TIEMPO_BLOQUEO = 15 * 60 * 1000;
 const intentosLogin = new Map();
 
 // ==========================================
-// EXPRESIÓN REGULAR PARA NOMBRES REALES
-// Solo letras (incluye tildes, ñ, ü) y espacios simples.
-// Mínimo 2 letras por palabra.
+// VALIDACIÓN ESTRICTA DE NOMBRES Y APELLIDOS REALES
+// Bloquea teclazos y combinaciones sin sentido
 // ==========================================
-const regexNombreValido = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]{2,}(?: [a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]{2,})*$/;
+const esNombreValidoBackend = (texto) => {
+    const limpio = String(texto || '').trim();
+
+    // 1. Longitud básica razonable
+    if (limpio.length < 2 || limpio.length > 35) return false;
+
+    // 2. Solo letras del español y espacios simples
+    const regexLetras = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+(?: [a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+)*$/;
+    if (!regexLetras.test(limpio)) return false;
+
+    const palabras = limpio.split(' ');
+
+    for (const palabra of palabras) {
+        if (palabra.length < 2 || palabra.length > 20) return false;
+
+        // Bloquear 3 o más letras iguales consecutivas (ej: "aaa", "ddd", "fff")
+        if (/([a-zA-ZáéíóúÁÉÍÓÚñÑüÜ])\1\1/i.test(palabra)) return false;
+
+        // Debe contener al menos una vocal por palabra
+        if (!/[aeiouáéíóúüAEIOUÁÉÍÓÚÜ]/i.test(palabra)) return false;
+
+        // Bloquear 4 o más consonantes seguidas sin vocales intermedias
+        if (/[bcdfghjklmnñpqrstvwxyzBCDFGHJKLMNÑPQRSTVWXYZ]{4,}/i.test(palabra)) return false;
+
+        // Bloquear 4 o más vocales seguidas
+        if (/[aeiouáéíóúüAEIOUÁÉÍÓÚÜ]{4,}/i.test(palabra)) return false;
+    }
+
+    return true;
+};
 
 // ==========================================
 // REGISTRAR USUARIO
@@ -37,18 +65,18 @@ export const registrarUsuario = async (req, res) => {
         }
 
         // 2. Validar que el nombre sea auténtico
-        if (!regexNombreValido.test(nombre)) {
+        if (!esNombreValidoBackend(nombre)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "El nombre no es válido. Solo se permiten letras (mínimo 2 caracteres)."
+                mensaje: "El nombre no es válido. Escribe un nombre real sin caracteres repetitivos."
             });
         }
 
         // 3. Validar que el apellido sea auténtico
-        if (!regexNombreValido.test(apellido)) {
+        if (!esNombreValidoBackend(apellido)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "El apellido no es válido. Solo se permiten letras (mínimo 2 caracteres)."
+                mensaje: "El apellido no es válido. Escribe un apellido real sin caracteres repetitivos."
             });
         }
 
@@ -647,7 +675,6 @@ export const restablecerPassword = async (req, res) => {
             [hash, id_usuario]
         );
 
-        // Si tenía intentos fallidos, los eliminamos
         const correoUsuario = String(
             usuarios[0].correo || ''
         ).trim().toLowerCase();
@@ -743,18 +770,18 @@ export const actualizarPerfil = async (req, res) => {
         }
 
         // Validar formato de nombre auténtico
-        if (!regexNombreValido.test(nombre)) {
+        if (!esNombreValidoBackend(nombre)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "El nombre no es válido. Solo se permiten letras (mínimo 2 caracteres)."
+                mensaje: "El nombre no es válido. Escribe un nombre real sin caracteres repetitivos."
             });
         }
 
         // Validar formato de apellido auténtico
-        if (!regexNombreValido.test(apellido)) {
+        if (!esNombreValidoBackend(apellido)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "El apellido no es válido. Solo se permiten letras (mínimo 2 caracteres)."
+                mensaje: "El apellido no es válido. Escribe un apellido real sin caracteres repetitivos."
             });
         }
 
