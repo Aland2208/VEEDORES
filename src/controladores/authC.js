@@ -23,48 +23,54 @@ const palabrasProhibidas = [
 const esNombreValidoBackend = (texto) => {
     const limpio = String(texto || '').trim().replace(/\s+/g, ' ');
 
-    // 1. Longitud básica razonable
     if (limpio.length < 2 || limpio.length > 30) return false;
 
-    // 2. Solo letras del abecedario en español y espacios simples
+    // Solo letras y espacios
     const regexLetras = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+(?: [a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+)*$/;
     if (!regexLetras.test(limpio)) return false;
 
-    // 3. Máximo 2 palabras por campo (ej. "Juan Carlos" o "Pérez Loor")
     const palabras = limpio.split(' ');
     if (palabras.length > 2) return false;
 
     for (const palabra of palabras) {
-        if (palabra.length < 2 || palabra.length > 15) return false;
+        if (palabra.length < 2 || palabra.length > 14) return false;
 
         const pLower = palabra.toLowerCase();
         const pSinTildes = pLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-        // 4. Comprobar contra términos y palabras no admitidas
         if (palabrasProhibidas.includes(pSinTildes)) return false;
 
-        // 5. Bloquear 3 letras idénticas seguidas (ej: "aaa", "fff", "lll")
+        // 3 letras repetidas consecutivas
         if (/([a-záéíóúñü])\1\1/i.test(pLower)) return false;
 
-        // 6. Debe contener al menos una vocal
-        if (!/[aeiouáéíóúü]/i.test(pLower)) return false;
+        // Debe contener al menos una vocal
+        const vocales = pLower.match(/[aeiouáéíóúü]/g) || [];
+        if (vocales.length === 0) return false;
 
-        // 7. Bloquear 3 o más vocales consecutivas no comunes (ej: "uie", "iee")
+        // Proporción equilibrada de vocales en palabras largas
+        if (palabra.length >= 6) {
+            const porcentajeVocales = vocales.length / palabra.length;
+            if (porcentajeVocales < 0.25 || porcentajeVocales > 0.70) return false;
+        }
+
+        // 3 consonantes o 3 vocales consecutivas
+        if (/[bcdfghjklmnñpqrstvwxyz]{3,}/i.test(pLower)) return false;
         if (/[aeiouáéíóúü]{3,}/i.test(pLower)) return false;
 
-        // 8. Bloquear 3 o más consonantes seguidas sin vocales
-        if (/[bcdfghjklmnñpqrstvwxyz]{3,}/i.test(pLower)) return false;
+        // Combinaciones de teclado comunes en teclazos
+        if (/(jd|dj|jn|nj|dn|nd|ed|fn|nf|bf|fb|ubf|fub|bbu|ffu|qj|xj|zx|jk|kj|wq|qw|fg|gf|vb|bv|bp|pb)/i.test(pLower)) return false;
 
-        // 9. Combinaciones fonéticas imposibles en español (bloquea "bf", "fb", "ubf", "fub")
-        if (/(bf|fb|ubf|fub|bbu|ffu|jd|dj|qj|xj|zx|jk|kj|wq|qw|fg|gf|vb|bv|bp|pb|fn|nf)/i.test(pLower)) return false;
+        // Máximo 2 veces la misma consonante por palabra
+        const conteoLetras = {};
+        for (const char of pLower) {
+            if (!'aeiouáéíóúü'.includes(char)) {
+                conteoLetras[char] = (conteoLetras[char] || 0) + 1;
+                if (conteoLetras[char] >= 3) return false;
+            }
+        }
 
-        // 10. Bloquear repetición excesiva de la misma consonante en una palabra corta
-        const conteoB = (pLower.match(/b/g) || []).length;
-        const conteoF = (pLower.match(/f/g) || []).length;
-        if (conteoB >= 3 || conteoF >= 3) return false;
-
-        // 11. Bucles repetitivos de teclado (ej: "aijdaijd", "asdfasdf")
-        if (/(.{2,4})\1\1/i.test(pLower)) return false;
+        // Bucles repetitivos
+        if (/(.{2,4})\1/i.test(pLower) && palabra.length > 8) return false;
     }
 
     return true;
