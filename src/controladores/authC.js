@@ -16,32 +16,29 @@ const intentosLogin = new Map();
 // ==========================================
 const esNombreValidoBackend = (texto) => {
     const limpio = String(texto || '').trim();
+    if (limpio.length < 2 || limpio.length > 40) return false;
 
-    // 1. Longitud básica razonable
-    if (limpio.length < 2 || limpio.length > 35) return false;
-
-    // 2. Solo letras del español y espacios simples
-    const regexLetras = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+(?: [a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+)*$/;
-    if (!regexLetras.test(limpio)) return false;
+    // Solo letras y espacios
+    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+(?: [a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+)*$/.test(limpio)) return false;
 
     const palabras = limpio.split(' ');
-
     for (const palabra of palabras) {
-        if (palabra.length < 2 || palabra.length > 20) return false;
+        if (palabra.length < 2 || palabra.length > 15) return false;
+        const pLower = palabra.toLowerCase();
 
-        // Bloquear 3 o más letras iguales consecutivas (ej: "aaa", "ddd", "fff")
-        if (/([a-zA-ZáéíóúÁÉÍÓÚñÑüÜ])\1\1/i.test(palabra)) return false;
-
-        // Debe contener al menos una vocal por palabra
-        if (!/[aeiouáéíóúüAEIOUÁÉÍÓÚÜ]/i.test(palabra)) return false;
-
-        // Bloquear 4 o más consonantes seguidas sin vocales intermedias
-        if (/[bcdfghjklmnñpqrstvwxyzBCDFGHJKLMNÑPQRSTVWXYZ]{4,}/i.test(palabra)) return false;
-
-        // Bloquear 4 o más vocales seguidas
-        if (/[aeiouáéíóúüAEIOUÁÉÍÓÚÜ]{4,}/i.test(palabra)) return false;
+        // 3 letras repetidas seguidas
+        if (/([a-záéíóúñü])\1\1/i.test(pLower)) return false;
+        // Al menos una vocal
+        if (!/[aeiouáéíóúü]/i.test(pLower)) return false;
+        // 4 consonantes seguidas
+        if (/[bcdfghjklmnñpqrstvwxyz]{4,}/i.test(pLower)) return false;
+        // 4 vocales seguidas
+        if (/[aeiouáéíóúü]{4,}/i.test(pLower)) return false;
+        // Combinaciones imposibles de teclado (teclazos)
+        if (/(jd|dj|qj|xj|zx|jk|kj|wq|qw|fg|gf|vb|bv)/i.test(pLower)) return false;
+        // Bucles repetitivos
+        if (/(.{2,4})\1\1/i.test(pLower)) return false;
     }
-
     return true;
 };
 
