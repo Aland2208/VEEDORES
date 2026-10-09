@@ -1,7 +1,13 @@
 import { Router } from "express";
 import {
-    registrarUsuario, loginUsuario, solicitarRecuperacion, restablecerPassword, obtenerPerfil, actualizarPerfil,
-    cambiarPassword, validarTokenRecuperacion
+    registrarUsuario,
+    loginUsuario,
+    solicitarRecuperacion,
+    restablecerPassword,
+    obtenerPerfil,
+    actualizarPerfil,
+    cambiarPassword,
+    validarTokenRecuperacion
 } from "../controladores/authC.js";
 
 const router = Router();

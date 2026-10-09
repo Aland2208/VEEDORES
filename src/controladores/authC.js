@@ -12,33 +12,60 @@ const intentosLogin = new Map();
 
 // ==========================================
 // VALIDACIÓN ESTRICTA DE NOMBRES Y APELLIDOS REALES
-// Bloquea teclazos y combinaciones sin sentido
+// Bloquea teclazos, frases y palabras prohibidas
 // ==========================================
-const esNombreValidoBackend = (texto) => {
-    const limpio = String(texto || '').trim();
-    if (limpio.length < 2 || limpio.length > 40) return false;
+const palabrasProhibidas = [
+    'mama', 'tanga', 'papa', 'culo', 'puta', 'puto', 'mierda', 'verga', 'pito',
+    'pendejo', 'pendeja', 'idiota', 'maricon', 'perra', 'perro', 'chucha', 'hdp',
+    'admin', 'administrador', 'root', 'test', 'prueba', 'usuario', 'null', 'undefined',
+    'anonimo', 'nobody', 'fake', 'bot', 'observador', 'veedor'
+];
 
-    // Solo letras y espacios
-    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+(?: [a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+)*$/.test(limpio)) return false;
+const esNombreValidoBackend = (texto) => {
+    // Normalizar espacios múltiples a un solo espacio
+    const limpio = String(texto || '').trim().replace(/\s+/g, ' ');
+
+    // 1. Longitud total permitida (entre 2 y 30 caracteres)
+    if (limpio.length < 2 || limpio.length > 30) return false;
+
+    // 2. Solo letras del español y espacios simples
+    const regexLetras = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+(?: [a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+)*$/;
+    if (!regexLetras.test(limpio)) return false;
 
     const palabras = limpio.split(' ');
+
+    // 3. Máximo 2 palabras por campo (ej. "Juan Carlos" o "Perez Ortiz")
+    if (palabras.length > 2) return false;
+
     for (const palabra of palabras) {
         if (palabra.length < 2 || palabra.length > 15) return false;
-        const pLower = palabra.toLowerCase();
 
-        // 3 letras repetidas seguidas
-        if (/([a-záéíóúñü])\1\1/i.test(pLower)) return false;
-        // Al menos una vocal
-        if (!/[aeiouáéíóúü]/i.test(pLower)) return false;
-        // 4 consonantes seguidas
-        if (/[bcdfghjklmnñpqrstvwxyz]{4,}/i.test(pLower)) return false;
+        // Quitar tildes para evaluar contra la lista de términos no admitidos
+        const pSinTildes = palabra.toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+
+        if (palabrasProhibidas.includes(pSinTildes)) return false;
+
+        // 3 letras repetidas seguidas (ej. "aaa", "fff")
+        if (/([a-záéíóúñü])\1\1/i.test(palabra)) return false;
+
+        // Al menos una vocal por palabra
+        if (!/[aeiouáéíóúü]/i.test(palabra)) return false;
+
+        // 4 consonantes seguidas sin vocales intermedias
+        if (/[bcdfghjklmnñpqrstvwxyz]{4,}/i.test(palabra)) return false;
+
         // 4 vocales seguidas
-        if (/[aeiouáéíóúü]{4,}/i.test(pLower)) return false;
-        // Combinaciones imposibles de teclado (teclazos)
-        if (/(jd|dj|qj|xj|zx|jk|kj|wq|qw|fg|gf|vb|bv)/i.test(pLower)) return false;
-        // Bucles repetitivos
-        if (/(.{2,4})\1\1/i.test(pLower)) return false;
+        if (/[aeiouáéíóúü]{4,}/i.test(palabra)) return false;
+
+        // Combinaciones de teclado comunes en teclazos (ej. "jd", "dj")
+        if (/(jd|dj|qj|xj|zx|jk|kj|wq|qw|fg|gf|vb|bv)/i.test(palabra)) return false;
+
+        // Bucles repetitivos (ej. "aijdaijd", "asdfasdf")
+        if (/(.{2,4})\1\1/i.test(palabra)) return false;
     }
+
     return true;
 };
 
@@ -49,8 +76,8 @@ export const registrarUsuario = async (req, res) => {
     try {
         let { nombre, apellido, correo, password, id_rol } = req.body;
 
-        nombre = String(nombre || '').trim();
-        apellido = String(apellido || '').trim();
+        nombre = String(nombre || '').trim().replace(/\s+/g, ' ');
+        apellido = String(apellido || '').trim().replace(/\s+/g, ' ');
         correo = String(correo || '').trim().toLowerCase();
 
         // 1. Validar campos obligatorios
@@ -65,7 +92,7 @@ export const registrarUsuario = async (req, res) => {
         if (!esNombreValidoBackend(nombre)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "El nombre no es válido. Escribe un nombre real sin caracteres repetitivos."
+                mensaje: "El nombre no es válido. Escriba un nombre real y formal."
             });
         }
 
@@ -73,7 +100,7 @@ export const registrarUsuario = async (req, res) => {
         if (!esNombreValidoBackend(apellido)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "El apellido no es válido. Escribe un apellido real sin caracteres repetitivos."
+                mensaje: "El apellido no es válido. Escriba un apellido real y formal."
             });
         }
 
@@ -154,7 +181,6 @@ export const loginUsuario = async (req, res) => {
                 });
             }
 
-            // Si terminó el tiempo de bloqueo, reiniciar intentos
             intentosLogin.delete(clave);
         }
 
@@ -179,7 +205,6 @@ export const loginUsuario = async (req, res) => {
             usuario.password_hash
         );
 
-        // Contraseña incorrecta
         if (!passValido) {
             const datos = intentosLogin.get(clave) || {
                 intentos: 0,
@@ -188,7 +213,6 @@ export const loginUsuario = async (req, res) => {
 
             datos.intentos++;
 
-            // Bloquear después de 3 intentos
             if (datos.intentos >= MAX_INTENTOS) {
                 datos.bloqueadoHasta = Date.now() + TIEMPO_BLOQUEO;
 
@@ -203,7 +227,6 @@ export const loginUsuario = async (req, res) => {
                 });
             }
 
-            // Guardar los intentos fallidos
             intentosLogin.set(clave, datos);
 
             const restantes = MAX_INTENTOS - datos.intentos;
@@ -217,10 +240,8 @@ export const loginUsuario = async (req, res) => {
             });
         }
 
-        // Login correcto: eliminar intentos fallidos
         intentosLogin.delete(clave);
 
-        // Generar JWT
         const token = jwt.sign(
             {
                 id_usuario: usuario.id_usuario,
@@ -309,293 +330,84 @@ export const solicitarRecuperacion = async (req, res) => {
  <meta name="viewport" content="width=device-width,initial-scale=1.0">
  <title>Recuperación de contraseña</title>
 </head>
-
-<body style="
- margin:0;
- padding:0;
- background-color:#f3f6f9;
- font-family:Arial,Helvetica,sans-serif;
- color:#071627;
-">
-
- <table width="100%" cellpadding="0" cellspacing="0" border="0"
-  style="background-color:#f3f6f9;padding:40px 15px;">
+<body style="margin:0;padding:0;background-color:#f3f6f9;font-family:Arial,Helvetica,sans-serif;color:#071627;">
+ <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f3f6f9;padding:40px 15px;">
   <tr>
    <td align="center">
-
-    <table width="100%" cellpadding="0" cellspacing="0" border="0"
-     style="
-      max-width:600px;
-      background:#ffffff;
-      border-radius:16px;
-      overflow:hidden;
-      box-shadow:0 4px 20px rgba(7,22,39,.08);
-     ">
-
-     <!-- BARRA SUPERIOR -->
-     <tr>
-      <td style="
-       height:6px;
-       background-color:#17b8ac;
-       font-size:0;
-       line-height:0;
-      ">
-       &nbsp;
-      </td>
-     </tr>
-
-     <!-- LOGO / CABECERA -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(7,22,39,.08);">
+     <tr><td style="height:6px;background-color:#17b8ac;font-size:0;line-height:0;">&nbsp;</td></tr>
      <tr>
       <td style="padding:35px 40px 25px 40px;">
-
        <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
-
          <td width="62" valign="middle">
-          <div style="
-           width:52px;
-           height:52px;
-           background-color:#071627;
-           border-radius:12px;
-           text-align:center;
-           line-height:52px;
-           color:#5eead4;
-           font-size:27px;
-           font-weight:bold;
-          ">
-           ◎
-          </div>
+          <div style="width:52px;height:52px;background-color:#071627;border-radius:12px;text-align:center;line-height:52px;color:#5eead4;font-size:27px;font-weight:bold;">◎</div>
          </td>
-
          <td valign="middle">
-          <div style="
-           font-size:26px;
-           font-weight:800;
-           color:#071627;
-           letter-spacing:1px;
-          ">
-           VIGÍA
-          </div>
-
-          <div style="
-           margin-top:4px;
-           font-size:11px;
-           font-weight:600;
-           color:#74889a;
-           letter-spacing:1.2px;
-          ">
-           OBSERVADORES · PESCA DE CERCO Y ATÚN
-          </div>
+          <div style="font-size:26px;font-weight:800;color:#071627;letter-spacing:1px;">VIGÍA</div>
+          <div style="margin-top:4px;font-size:11px;font-weight:600;color:#74889a;letter-spacing:1.2px;">OBSERVADORES · PESCA DE CERCO Y ATÚN</div>
          </td>
-
         </tr>
        </table>
-
       </td>
      </tr>
-
-     <!-- SEPARADOR -->
+     <tr><td style="padding:0 40px;"><div style="height:1px;background-color:#e5eaef;"></div></td></tr>
      <tr>
-      <td style="padding:0 40px;">
-       <div style="
-        height:1px;
-        background-color:#e5eaef;
-       "></div>
-      </td>
-     </tr>
-
-     <!-- CONTENIDO -->
-     <tr>
-      <td style="
-       padding:38px 40px 15px 40px;
-       text-align:center;
-      ">
-
-       <!-- ICONO -->
-       <div style="
-        width:72px;
-        height:72px;
-        margin:0 auto 24px auto;
-        background-color:#e9fbf9;
-        border-radius:50%;
-        line-height:72px;
-        font-size:34px;
-       ">
-        🔒
-       </div>
-
-       <h1 style="
-        margin:0 0 15px 0;
-        font-size:28px;
-        line-height:36px;
-        color:#071627;
-        font-weight:800;
-       ">
-        Recuperación de contraseña
-       </h1>
-
-       <p style="
-        margin:0 auto;
-        max-width:470px;
-        color:#66798a;
-        font-size:15px;
-        line-height:24px;
-       ">
-        Recibimos una solicitud para restablecer la contraseña
-        asociada a tu cuenta de <strong style="color:#071627;">VIGÍA</strong>.
+      <td style="padding:38px 40px 15px 40px;text-align:center;">
+       <div style="width:72px;height:72px;margin:0 auto 24px auto;background-color:#e9fbf9;border-radius:50%;line-height:72px;font-size:34px;">🔒</div>
+       <h1 style="margin:0 0 15px 0;font-size:28px;line-height:36px;color:#071627;font-weight:800;">Recuperación de contraseña</h1>
+       <p style="margin:0 auto;max-width:470px;color:#66798a;font-size:15px;line-height:24px;">
+        Recibimos una solicitud para restablecer la contraseña asociada a tu cuenta de <strong style="color:#071627;">VIGÍA</strong>.
        </p>
-
       </td>
      </tr>
-
-     <!-- BOTÓN -->
      <tr>
       <td align="center" style="padding:20px 40px 30px 40px;">
-
        <table cellpadding="0" cellspacing="0" border="0">
         <tr>
-         <td align="center"
-          style="
-           background-color:#ff7a52;
-           border-radius:30px;
-          ">
-
-          <a href="${urlRecuperacion}"
-           target="_blank"
-           style="
-            display:inline-block;
-            padding:16px 34px;
-            color:#071627;
-            text-decoration:none;
-            font-size:14px;
-            font-weight:800;
-            letter-spacing:.5px;
-           ">
+         <td align="center" style="background-color:#ff7a52;border-radius:30px;">
+          <a href="${urlRecuperacion}" target="_blank" style="display:inline-block;padding:16px 34px;color:#071627;text-decoration:none;font-size:14px;font-weight:800;letter-spacing:.5px;">
            RESTABLECER MI CONTRASEÑA →
           </a>
-
          </td>
         </tr>
        </table>
-
       </td>
      </tr>
-
-     <!-- INFORMACIÓN -->
      <tr>
       <td style="padding:0 40px 30px 40px;">
-
-       <table width="100%" cellpadding="0" cellspacing="0"
-        style="
-         background-color:#f5f8fa;
-         border-radius:12px;
-        ">
-
+       <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f8fa;border-radius:12px;">
         <tr>
-         <td width="45"
-          style="
-           padding:18px 0 18px 20px;
-           color:#17b8ac;
-           font-size:21px;
-           vertical-align:top;
-          ">
-           ◷
-         </td>
-
-         <td style="
-          padding:17px 20px 17px 5px;
-          color:#66798a;
-          font-size:13px;
-          line-height:20px;
-         ">
-
-          <strong style="color:#071627;">
-           Este enlace es válido durante 1 hora.
-          </strong>
-
-          <br>
-
-          Después de ese tiempo deberás solicitar un nuevo
-          enlace de recuperación.
-
+         <td width="45" style="padding:18px 0 18px 20px;color:#17b8ac;font-size:21px;vertical-align:top;">◷</td>
+         <td style="padding:17px 20px 17px 5px;color:#66798a;font-size:13px;line-height:20px;">
+          <strong style="color:#071627;">Este enlace es válido durante 1 hora.</strong><br>
+          Después de ese tiempo deberás solicitar un nuevo enlace de recuperación.
          </td>
         </tr>
-
        </table>
-
       </td>
      </tr>
-
-     <!-- SEGURIDAD -->
      <tr>
       <td style="padding:0 40px 35px 40px;">
-
-       <p style="
-        margin:0;
-        color:#8293a1;
-        font-size:12px;
-        line-height:19px;
-        text-align:center;
-       ">
-        Si no solicitaste un cambio de contraseña, puedes ignorar
-        este mensaje. Tu contraseña actual permanecerá sin cambios.
+       <p style="margin:0;color:#8293a1;font-size:12px;line-height:19px;text-align:center;">
+        Si no solicitaste un cambio de contraseña, puedes ignorar este mensaje. Tu contraseña actual permanecerá sin cambios.
        </p>
-
       </td>
      </tr>
-
-     <!-- FOOTER -->
      <tr>
-      <td style="
-       padding:25px 40px;
-       background-color:#071627;
-       text-align:center;
-      ">
-
-       <div style="
-        color:#ffffff;
-        font-size:13px;
-        font-weight:700;
-        margin-bottom:6px;
-       ">
-        Sistema Observador de Pesca
-       </div>
-
-       <div style="
-        color:#5eead4;
-        font-size:11px;
-        letter-spacing:.7px;
-       ">
-        VIGÍA · DETECCIÓN DE ESPECIES CON IA
-       </div>
-
-       <div style="
-        margin-top:15px;
-        color:#8195a5;
-        font-size:10px;
-       ">
-        Este es un mensaje automático. No respondas a este correo.
-       </div>
-
+      <td style="padding:25px 40px;background-color:#071627;text-align:center;">
+       <div style="color:#ffffff;font-size:13px;font-weight:700;margin-bottom:6px;">Sistema Observador de Pesca</div>
+       <div style="color:#5eead4;font-size:11px;letter-spacing:.7px;">VIGÍA · DETECCIÓN DE ESPECIES CON IA</div>
+       <div style="margin-top:15px;color:#8195a5;font-size:10px;">Este es un mensaje automático. No respondas a este correo.</div>
       </td>
      </tr>
-
     </table>
-
-    <!-- TEXTO EXTERIOR -->
-    <p style="
-     margin:20px 0 0 0;
-     color:#98a5b1;
-     font-size:11px;
-     text-align:center;
-    ">
+    <p style="margin:20px 0 0 0;color:#98a5b1;font-size:11px;text-align:center;">
      © ${new Date().getFullYear()} VIGÍA · Sistema Observador de Pesca
     </p>
-
    </td>
   </tr>
  </table>
-
 </body>
 </html>
 `
@@ -615,10 +427,7 @@ export const solicitarRecuperacion = async (req, res) => {
 
         const data = await respuestaBrevo.json();
 
-        console.log(
-            '📨 Correo enviado correctamente. ID:',
-            data.messageId
-        );
+        console.log('📨 Correo enviado correctamente. ID:', data.messageId);
 
         return res.status(200).json({
             estado: 1,
@@ -672,10 +481,7 @@ export const restablecerPassword = async (req, res) => {
             [hash, id_usuario]
         );
 
-        const correoUsuario = String(
-            usuarios[0].correo || ''
-        ).trim().toLowerCase();
-
+        const correoUsuario = String(usuarios[0].correo || '').trim().toLowerCase();
         if (correoUsuario) {
             intentosLogin.delete(correoUsuario);
         }
@@ -710,7 +516,7 @@ export const obtenerPerfil = async (req, res) => {
         }
 
         const [usuarios] = await conmysql.query(
-            `SELECT id_usuario,nombre,apellido,correo
+            `SELECT id_usuario, nombre, apellido, correo
              FROM usuarios
              WHERE id_usuario=? AND estado=1
              LIMIT 1`,
@@ -748,8 +554,8 @@ export const actualizarPerfil = async (req, res) => {
 
         let { nombre, apellido, correo } = req.body;
 
-        nombre = String(nombre || "").trim();
-        apellido = String(apellido || "").trim();
+        nombre = String(nombre || "").trim().replace(/\s+/g, ' ');
+        apellido = String(apellido || "").trim().replace(/\s+/g, ' ');
         correo = String(correo || "").trim().toLowerCase();
 
         if (!idUsuario) {
@@ -770,7 +576,7 @@ export const actualizarPerfil = async (req, res) => {
         if (!esNombreValidoBackend(nombre)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "El nombre no es válido. Escribe un nombre real sin caracteres repetitivos."
+                mensaje: "El nombre no es válido. Escriba un nombre real y formal."
             });
         }
 
@@ -778,28 +584,7 @@ export const actualizarPerfil = async (req, res) => {
         if (!esNombreValidoBackend(apellido)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "El apellido no es válido. Escribe un apellido real sin caracteres repetitivos."
-            });
-        }
-
-        if (nombre.length > 100) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "El nombre no puede superar los 100 caracteres."
-            });
-        }
-
-        if (apellido.length > 100) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "El apellido no puede superar los 100 caracteres."
-            });
-        }
-
-        if (correo.length > 150) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "El correo no puede superar los 150 caracteres."
+                mensaje: "El apellido no es válido. Escriba un apellido real y formal."
             });
         }
 
@@ -899,7 +684,7 @@ export const cambiarPassword = async (req, res) => {
         }
 
         const [usuarios] = await conmysql.query(
-            `SELECT id_usuario,password_hash
+            `SELECT id_usuario, password_hash
              FROM usuarios
              WHERE id_usuario=? AND estado=1
              LIMIT 1`,
@@ -958,10 +743,7 @@ export const cambiarPassword = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(
-            '❌ Error cambiarPassword:',
-            error
-        );
+        console.error('❌ Error cambiarPassword:', error);
 
         return res.status(500).json({
             estado: 0,
