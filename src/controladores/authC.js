@@ -11,8 +11,7 @@ const TIEMPO_BLOQUEO = 15 * 60 * 1000;
 const intentosLogin = new Map();
 
 // ==========================================
-// VALIDACIÓN ESTRICTA DE NOMBRES Y APELLIDOS REALES
-// Bloquea teclazos, frases y palabras prohibidas
+// LISTA NEGRA Y DETECTOR DE TEXTO INCOHERENTE
 // ==========================================
 const palabrasProhibidas = [
     'mama', 'tanga', 'papa', 'culo', 'puta', 'puto', 'mierda', 'verga', 'pito',
@@ -22,48 +21,50 @@ const palabrasProhibidas = [
 ];
 
 const esNombreValidoBackend = (texto) => {
-    // Normalizar espacios múltiples a un solo espacio
     const limpio = String(texto || '').trim().replace(/\s+/g, ' ');
 
-    // 1. Longitud total permitida (entre 2 y 30 caracteres)
+    // 1. Longitud básica razonable
     if (limpio.length < 2 || limpio.length > 30) return false;
 
-    // 2. Solo letras del español y espacios simples
+    // 2. Solo letras del abecedario en español y espacios simples
     const regexLetras = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+(?: [a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+)*$/;
     if (!regexLetras.test(limpio)) return false;
 
+    // 3. Máximo 2 palabras por campo (ej. "Juan Carlos" o "Pérez Loor")
     const palabras = limpio.split(' ');
-
-    // 3. Máximo 2 palabras por campo (ej. "Juan Carlos" o "Perez Ortiz")
     if (palabras.length > 2) return false;
 
     for (const palabra of palabras) {
         if (palabra.length < 2 || palabra.length > 15) return false;
 
-        // Quitar tildes para evaluar contra la lista de términos no admitidos
-        const pSinTildes = palabra.toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '');
+        const pLower = palabra.toLowerCase();
+        const pSinTildes = pLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
+        // 4. Comprobar contra términos y palabras no admitidas
         if (palabrasProhibidas.includes(pSinTildes)) return false;
 
-        // 3 letras repetidas seguidas (ej. "aaa", "fff")
-        if (/([a-záéíóúñü])\1\1/i.test(palabra)) return false;
+        // 5. Bloquear 3 letras idénticas seguidas (ej: "aaa", "fff", "lll")
+        if (/([a-záéíóúñü])\1\1/i.test(pLower)) return false;
 
-        // Al menos una vocal por palabra
-        if (!/[aeiouáéíóúü]/i.test(palabra)) return false;
+        // 6. Debe contener al menos una vocal
+        if (!/[aeiouáéíóúü]/i.test(pLower)) return false;
 
-        // 4 consonantes seguidas sin vocales intermedias
-        if (/[bcdfghjklmnñpqrstvwxyz]{4,}/i.test(palabra)) return false;
+        // 7. Bloquear 3 o más vocales consecutivas no comunes (ej: "uie", "iee")
+        if (/[aeiouáéíóúü]{3,}/i.test(pLower)) return false;
 
-        // 4 vocales seguidas
-        if (/[aeiouáéíóúü]{4,}/i.test(palabra)) return false;
+        // 8. Bloquear 3 o más consonantes seguidas sin vocales
+        if (/[bcdfghjklmnñpqrstvwxyz]{3,}/i.test(pLower)) return false;
 
-        // Combinaciones de teclado comunes en teclazos (ej. "jd", "dj")
-        if (/(jd|dj|qj|xj|zx|jk|kj|wq|qw|fg|gf|vb|bv)/i.test(palabra)) return false;
+        // 9. Combinaciones fonéticas imposibles en español (bloquea "bf", "fb", "ubf", "fub")
+        if (/(bf|fb|ubf|fub|bbu|ffu|jd|dj|qj|xj|zx|jk|kj|wq|qw|fg|gf|vb|bv|bp|pb|fn|nf)/i.test(pLower)) return false;
 
-        // Bucles repetitivos (ej. "aijdaijd", "asdfasdf")
-        if (/(.{2,4})\1\1/i.test(palabra)) return false;
+        // 10. Bloquear repetición excesiva de la misma consonante en una palabra corta
+        const conteoB = (pLower.match(/b/g) || []).length;
+        const conteoF = (pLower.match(/f/g) || []).length;
+        if (conteoB >= 3 || conteoF >= 3) return false;
+
+        // 11. Bucles repetitivos de teclado (ej: "aijdaijd", "asdfasdf")
+        if (/(.{2,4})\1\1/i.test(pLower)) return false;
     }
 
     return true;
@@ -113,13 +114,20 @@ export const registrarUsuario = async (req, res) => {
             });
         }
 
+        // Normalizar capitalización (Primera letra Mayúscula por palabra)
+        const formatearPalabra = (str) =>
+            str.split(' ').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+
+        const nombreFormateado = formatearPalabra(nombre);
+        const apellidoFormateado = formatearPalabra(apellido);
+
         const salt = await bcrypt.genSalt(10);
         const hash = await bcrypt.hash(password, salt);
 
         const [resultado] = await conmysql.query(
             `INSERT INTO usuarios (nombre, apellido, correo, password_hash, id_rol)
              VALUES (?, ?, ?, ?, ?)`,
-            [nombre, apellido, correo, hash, id_rol || 2]
+            [nombreFormateado, apellidoFormateado, correo, hash, id_rol || 2]
         );
 
         res.status(201).json({
@@ -166,7 +174,6 @@ export const loginUsuario = async (req, res) => {
         const ahora = Date.now();
         const registro = intentosLogin.get(clave);
 
-        // Verificar si el usuario está bloqueado
         if (registro?.bloqueadoHasta) {
             if (ahora < registro.bloqueadoHasta) {
                 const segundosRestantes = Math.ceil(
@@ -184,7 +191,6 @@ export const loginUsuario = async (req, res) => {
             intentosLogin.delete(clave);
         }
 
-        // Buscar usuario activo
         const [usuarios] = await conmysql.query(
             `SELECT * FROM usuarios WHERE correo=? AND estado=1`,
             [correo]
@@ -199,7 +205,6 @@ export const loginUsuario = async (req, res) => {
 
         const usuario = usuarios[0];
 
-        // Comprobar contraseña
         const passValido = await bcrypt.compare(
             password,
             usuario.password_hash
@@ -626,11 +631,17 @@ export const actualizarPerfil = async (req, res) => {
             });
         }
 
+        const formatearPalabra = (str) =>
+            str.split(' ').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+
+        const nombreFormateado = formatearPalabra(nombre);
+        const apellidoFormateado = formatearPalabra(apellido);
+
         await conmysql.query(
             `UPDATE usuarios
              SET nombre=?, apellido=?, correo=?
              WHERE id_usuario=?`,
-            [nombre, apellido, correo, idUsuario]
+            [nombreFormateado, apellidoFormateado, correo, idUsuario]
         );
 
         return res.status(200).json({
@@ -638,8 +649,8 @@ export const actualizarPerfil = async (req, res) => {
             mensaje: "Información actualizada correctamente.",
             data: {
                 id_usuario: idUsuario,
-                nombre,
-                apellido,
+                nombre: nombreFormateado,
+                apellido: apellidoFormateado,
                 correo
             }
         });
