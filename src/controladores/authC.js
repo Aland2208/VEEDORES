@@ -20,10 +20,26 @@ const palabrasProhibidas = [
     'anonimo', 'nobody', 'fake', 'bot', 'observador', 'veedor', 'tonto', 'bobo', 'loco'
 ];
 
+// ==========================================
+// LISTA ESTRICTA DE PROVEEDORES PERMITIDOS
+// ==========================================
 const dominiosValidosBackend = [
-    'gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'yahoo.es',
-    'icloud.com', 'live.com', 'msn.com', 'upse.edu.ec', 'ug.edu.ec',
-    'espe.edu.ec', 'epn.edu.ec', 'outlook.es', 'protonmail.com', 'mail.com'
+    'gmail.com',
+    'outlook.com',
+    'outlook.es',
+    'hotmail.com',
+    'hotmail.es',
+    'yahoo.com',
+    'yahoo.es',
+    'icloud.com',
+    'live.com',
+    'msn.com',
+    'upse.edu.ec',
+    'ug.edu.ec',
+    'espe.edu.ec',
+    'epn.edu.ec',
+    'protonmail.com',
+    'mail.com'
 ];
 
 const esNombreValidoBackend = (texto) => {
@@ -86,21 +102,11 @@ const esCorreoValidoBackend = (correo) => {
     const usuario = partes[0];
     const dominio = partes[1];
 
-    if (usuario.length < 3 || usuario.length > 40) return false;
+    if (usuario.length < 3 || usuario.length > 35) return false;
     if (/(.)\1\1\1/.test(usuario)) return false;
 
-    if (dominiosValidosBackend.includes(dominio)) {
-        return true;
-    }
-
-    const nombreDominio = dominio.split('.')[0];
-    if (nombreDominio.length < 3 || nombreDominio.length > 20) return false;
-    if (/[bcdfghjklmnpqrstvwxyz]{4,}/.test(nombreDominio)) return false;
-    if (/[aeiou]{4,}/.test(nombreDominio)) return false;
-    if (/(.)\1\1/.test(nombreDominio)) return false;
-    if (/(fj|jf|hj|jh|eu|ue|uf|fu|eu|ui){3,}/.test(nombreDominio)) return false;
-
-    return true;
+    // Solo dominios válidos de proveedores reales
+    return dominiosValidosBackend.includes(dominio);
 };
 
 // ==========================================
@@ -142,7 +148,7 @@ export const registrarUsuario = async (req, res) => {
         if (!esCorreoValidoBackend(correo)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "El correo electrónico no es válido o proviene de un dominio no admitido."
+                mensaje: "El correo electrónico no es válido. Use un proveedor reconocido (Gmail, Outlook, Hotmail, etc.)."
             });
         }
 
@@ -626,7 +632,7 @@ export const actualizarPerfil = async (req, res) => {
         if (!esCorreoValidoBackend(correo)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "El correo electrónico no es válido o proviene de un dominio no admitido."
+                mensaje: "El correo electrónico no es válido. Use un proveedor reconocido (Gmail, Outlook, Hotmail, etc.)."
             });
         }
 
