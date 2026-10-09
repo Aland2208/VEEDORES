@@ -47,7 +47,6 @@ export const buscarAdministradorPorCorreo = async (req, res) => {
     }
 };
 
-
 /* OBTENER ADMINISTRADOR ACTUAL DEL OBSERVADOR */
 export const getAdministradorActual = async (req, res) => {
     try {
@@ -103,7 +102,6 @@ export const getAdministradorActual = async (req, res) => {
     }
 };
 
-
 /* OBTENER OBSERVADORES ACTUALES DE UN ADMINISTRADOR */
 export const getUsuariosAdministrador = async (req, res) => {
     try {
@@ -151,7 +149,6 @@ export const getUsuariosAdministrador = async (req, res) => {
     }
 };
 
-
 /* OBTENER OBSERVADORES SIN ADMINISTRADOR */
 export const getUsuariosDisponibles = async (req, res) => {
     try {
@@ -189,7 +186,6 @@ export const getUsuariosDisponibles = async (req, res) => {
         });
     }
 };
-
 
 /* ASIGNAR OBSERVADOR A ADMINISTRADOR */
 export const asignarUsuario = async (req, res) => {
@@ -294,7 +290,6 @@ export const asignarUsuario = async (req, res) => {
     }
 };
 
-
 /* REASIGNAR OBSERVADOR A OTRO ADMINISTRADOR */
 export const reasignarUsuario = async (req, res) => {
     let conexion;
@@ -372,11 +367,6 @@ export const reasignarUsuario = async (req, res) => {
             });
         }
 
-        /*
-         * OBTENEMOS UNA SOLA FECHA DE ECUADOR.
-         * La misma fecha se utiliza para cerrar la asignación
-         * anterior y comenzar la nueva.
-         */
         const [fecha] = await conexion.query(`
             SELECT
                 DATE_SUB(
@@ -435,7 +425,6 @@ export const reasignarUsuario = async (req, res) => {
     }
 };
 
-
 /* FINALIZAR ASIGNACIÓN ACTUAL */
 export const quitarUsuarioAdministrador = async (req, res) => {
     try {
@@ -482,7 +471,6 @@ export const quitarUsuarioAdministrador = async (req, res) => {
         });
     }
 };
-
 
 /* HISTORIAL DE ADMINISTRADORES DE UN OBSERVADOR */
 export const getHistorialUsuario = async (req, res) => {
@@ -535,9 +523,7 @@ export const getHistorialUsuario = async (req, res) => {
     }
 };
 
-// ======================================================
-// HISTORIAL - VEEDORES RELACIONADOS CON ADMINISTRADOR
-// ======================================================
+/* HISTORIAL - VEEDORES RELACIONADOS CON ADMINISTRADOR */
 export const getVeedoresHistorial = async (req, res) => {
     try {
         const idAdministrador = Number(req.params.id_administrador);
@@ -549,13 +535,12 @@ export const getVeedoresHistorial = async (req, res) => {
             });
         }
 
-        // VALIDAR ADMINISTRADOR
         const [administradores] = await conmysql.query(`
-   SELECT id_usuario,nombre,apellido,correo
-   FROM usuarios
-   WHERE id_usuario=? AND id_rol=1
-   LIMIT 1
-  `, [idAdministrador]);
+            SELECT id_usuario,nombre,apellido,correo
+            FROM usuarios
+            WHERE id_usuario=? AND id_rol=1
+            LIMIT 1
+        `, [idAdministrador]);
 
         if (administradores.length === 0) {
             return res.status(404).json({
@@ -564,74 +549,60 @@ export const getVeedoresHistorial = async (req, res) => {
             });
         }
 
-        // OBTENER TODOS LOS VEEDORES QUE HAN ESTADO
-        // RELACIONADOS CON ESTE ADMINISTRADOR
         const [veedores] = await conmysql.query(`
-   SELECT
-    u.id_usuario,
-    u.nombre,
-    u.apellido,
-    u.correo,
-    u.estado,
-
-    COUNT(DISTINCT rep.id_reporte) AS total_reportes,
-
-    COUNT(DISTINCT CASE
-     WHEN rep.id_tipo_reporte IS NOT NULL
-      AND rep.titulo IS NOT NULL
-      AND TRIM(rep.titulo)<>''
-     THEN rep.id_reporte
-    END) AS reportes_completos,
-
-    COUNT(DISTINCT CASE
-     WHEN rep.id_reporte IS NOT NULL
-      AND (
-       rep.id_tipo_reporte IS NULL
-       OR rep.titulo IS NULL
-       OR TRIM(rep.titulo)=''
-      )
-     THEN rep.id_reporte
-    END) AS reportes_incompletos,
-
-    MAX(
-     CASE
-      WHEN a.fecha_fin IS NULL THEN 1
-      ELSE 0
-     END
-    ) AS relacion_actual,
-
-    MIN(a.fecha_inicio) AS primera_asignacion,
-    MAX(a.fecha_fin) AS ultima_fecha_fin
-
-   FROM administrador a
-
-   INNER JOIN usuarios u
-    ON a.id_usuario=u.id_usuario
-
-   LEFT JOIN reportes rep
-    ON rep.id_usuario=u.id_usuario
-    AND rep.fecha_generacion>=a.fecha_inicio
-    AND (
-     a.fecha_fin IS NULL
-     OR rep.fecha_generacion<a.fecha_fin
-    )
-
-   WHERE
-    a.id_administrador=?
-    AND u.id_rol=2
-
-   GROUP BY
-    u.id_usuario,
-    u.nombre,
-    u.apellido,
-    u.correo,
-    u.estado
-
-   ORDER BY
-    relacion_actual DESC,
-    u.nombre ASC,
-    u.apellido ASC
-  `, [idAdministrador]);
+            SELECT
+                u.id_usuario,
+                u.nombre,
+                u.apellido,
+                u.correo,
+                u.estado,
+                COUNT(DISTINCT rep.id_reporte) AS total_reportes,
+                COUNT(DISTINCT CASE
+                    WHEN rep.id_tipo_reporte IS NOT NULL
+                     AND rep.titulo IS NOT NULL
+                     AND TRIM(rep.titulo)<>''
+                    THEN rep.id_reporte
+                END) AS reportes_completos,
+                COUNT(DISTINCT CASE
+                    WHEN rep.id_reporte IS NOT NULL
+                     AND (
+                       rep.id_tipo_reporte IS NULL
+                       OR rep.titulo IS NULL
+                       OR TRIM(rep.titulo)=''
+                     )
+                    THEN rep.id_reporte
+                END) AS reportes_incompletos,
+                MAX(
+                    CASE
+                        WHEN a.fecha_fin IS NULL THEN 1
+                        ELSE 0
+                    END
+                ) AS relacion_actual,
+                MIN(a.fecha_inicio) AS primera_asignacion,
+                MAX(a.fecha_fin) AS ultima_fecha_fin
+            FROM administrador a
+            INNER JOIN usuarios u
+                ON a.id_usuario=u.id_usuario
+            LEFT JOIN reportes rep
+                ON rep.id_usuario=u.id_usuario
+                AND rep.fecha_generacion>=a.fecha_inicio
+                AND (
+                    a.fecha_fin IS NULL
+                    OR rep.fecha_generacion<a.fecha_fin
+                )
+            WHERE a.id_administrador=?
+              AND u.id_rol=2
+            GROUP BY
+                u.id_usuario,
+                u.nombre,
+                u.apellido,
+                u.correo,
+                u.estado
+            ORDER BY
+                relacion_actual DESC,
+                u.nombre ASC,
+                u.apellido ASC
+        `, [idAdministrador]);
 
         return res.status(200).json({
             estado: 1,
@@ -640,7 +611,6 @@ export const getVeedoresHistorial = async (req, res) => {
             cantidad: veedores.length,
             data: veedores
         });
-
     } catch (error) {
         console.error("❌ Error getVeedoresHistorial:", error);
 
@@ -652,9 +622,7 @@ export const getVeedoresHistorial = async (req, res) => {
     }
 };
 
-// ======================================================
-// HISTORIAL - REPORTES DE UN VEEDOR
-// ======================================================
+/* HISTORIAL - REPORTES DE UN VEEDOR */
 export const getReportesHistorialVeedor = async (req, res) => {
     try {
         const idAdministrador = Number(req.params.id_administrador);
@@ -674,13 +642,12 @@ export const getReportesHistorialVeedor = async (req, res) => {
             });
         }
 
-        // VALIDAR ADMINISTRADOR
         const [administradores] = await conmysql.query(`
-   SELECT id_usuario,nombre,apellido,correo
-   FROM usuarios
-   WHERE id_usuario=? AND id_rol=1
-   LIMIT 1
-  `, [idAdministrador]);
+            SELECT id_usuario,nombre,apellido,correo
+            FROM usuarios
+            WHERE id_usuario=? AND id_rol=1
+            LIMIT 1
+        `, [idAdministrador]);
 
         if (administradores.length === 0) {
             return res.status(404).json({
@@ -689,15 +656,13 @@ export const getReportesHistorialVeedor = async (req, res) => {
             });
         }
 
-        // VALIDAR QUE EL VEEDOR HAYA ESTADO RELACIONADO
-        // CON ESTE ADMINISTRADOR
         const [relaciones] = await conmysql.query(`
-   SELECT id_asignacion
-   FROM administrador
-   WHERE id_administrador=?
-    AND id_usuario=?
-   LIMIT 1
-  `, [idAdministrador, idUsuario]);
+            SELECT id_asignacion
+            FROM administrador
+            WHERE id_administrador=?
+              AND id_usuario=?
+            LIMIT 1
+        `, [idAdministrador, idUsuario]);
 
         if (relaciones.length === 0) {
             return res.status(403).json({
@@ -706,13 +671,12 @@ export const getReportesHistorialVeedor = async (req, res) => {
             });
         }
 
-        // INFORMACIÓN DEL VEEDOR
         const [veedores] = await conmysql.query(`
-   SELECT id_usuario,nombre,apellido,correo,estado
-   FROM usuarios
-   WHERE id_usuario=? AND id_rol=2
-   LIMIT 1
-  `, [idUsuario]);
+            SELECT id_usuario,nombre,apellido,correo,estado
+            FROM usuarios
+            WHERE id_usuario=? AND id_rol=2
+            LIMIT 1
+        `, [idUsuario]);
 
         if (veedores.length === 0) {
             return res.status(404).json({
@@ -721,94 +685,55 @@ export const getReportesHistorialVeedor = async (req, res) => {
             });
         }
 
-        // OBTENER TODOS LOS REPORTES QUE FUERON GENERADOS
-        // MIENTRAS EL VEEDOR PERTENECÍA A ESTE ADMINISTRADOR
         const [reportes] = await conmysql.query(`
-   SELECT DISTINCT
-    rep.id_reporte,
-    rep.id_captura,
-    rep.id_usuario,
-    rep.id_tipo_reporte,
-    rep.titulo,
-    rep.archivo_pdf,
-    rep.archivo_csv,
-
-    DATE_FORMAT(
-     rep.fecha_generacion,
-     '%Y-%m-%d'
-    ) AS fecha_reporte,
-
-    DATE_FORMAT(
-     rep.fecha_generacion,
-     '%H:%i:%s'
-    ) AS hora_reporte,
-
-    DATE_FORMAT(
-     rep.fecha_generacion,
-     '%Y-%m-%d %H:%i:%s'
-    ) AS fecha_generacion,
-
-    tr.nombre_tipo,
-
-    c.peso,
-
-    DATE_FORMAT(
-     c.fecha_hora,
-     '%Y-%m-%d'
-    ) AS fecha_captura,
-
-    DATE_FORMAT(
-     c.fecha_hora,
-     '%H:%i:%s'
-    ) AS hora_captura,
-
-    d.id_deteccion,
-    d.porcentaje,
-    d.imagen_url,
-
-    e.id_especie,
-    e.nombre_comun AS especie,
-    e.nombre_cientifico,
-
-    CASE
-     WHEN rep.id_tipo_reporte IS NOT NULL
-      AND rep.titulo IS NOT NULL
-      AND TRIM(rep.titulo)<>''
-     THEN 'Completo'
-     ELSE 'Incompleto'
-    END AS estado_reporte
-
-   FROM reportes rep
-
-   INNER JOIN administrador a
-    ON a.id_usuario=rep.id_usuario
-
-   LEFT JOIN tipos_reporte tr
-    ON rep.id_tipo_reporte=tr.id_tipo_reporte
-
-   LEFT JOIN capturas c
-    ON rep.id_captura=c.id_captura
-
-   LEFT JOIN detecciones d
-    ON c.id_deteccion=d.id_deteccion
-
-   LEFT JOIN especies e
-    ON d.id_especie=e.id_especie
-
-   WHERE
-    rep.id_usuario=?
-    AND a.id_administrador=?
-
-    AND rep.fecha_generacion>=a.fecha_inicio
-
-    AND (
-     a.fecha_fin IS NULL
-     OR rep.fecha_generacion<a.fecha_fin
-    )
-
-   ORDER BY
-    rep.fecha_generacion DESC
-  `, [idUsuario, idAdministrador]);
+            SELECT DISTINCT
+                rep.id_reporte,
+                rep.id_captura,
+                rep.id_usuario,
+                rep.id_tipo_reporte,
+                rep.titulo,
+                rep.archivo_pdf,
+                rep.archivo_csv,
+                DATE_FORMAT(rep.fecha_generacion,'%Y-%m-%d') AS fecha_reporte,
+                DATE_FORMAT(rep.fecha_generacion,'%H:%i:%s') AS hora_reporte,
+                DATE_FORMAT(rep.fecha_generacion,'%Y-%m-%d %H:%i:%s') AS fecha_generacion,
+                tr.nombre_tipo,
+                c.peso,
+                DATE_FORMAT(c.fecha_hora,'%Y-%m-%d') AS fecha_captura,
+                DATE_FORMAT(c.fecha_hora,'%H:%i:%s') AS hora_captura,
+                d.id_deteccion,
+                d.porcentaje,
+                d.imagen_url,
+                e.id_especie,
+                e.nombre_comun AS especie,
+                e.nombre_cientifico,
+                CASE
+                    WHEN rep.id_tipo_reporte IS NOT NULL
+                     AND rep.titulo IS NOT NULL
+                     AND TRIM(rep.titulo)<>''
+                    THEN 'Completo'
+                    ELSE 'Incompleto'
+                END AS estado_reporte
+            FROM reportes rep
+            INNER JOIN administrador a
+                ON a.id_usuario=rep.id_usuario
+            LEFT JOIN tipos_reporte tr
+                ON rep.id_tipo_reporte=tr.id_tipo_reporte
+            LEFT JOIN capturas c
+                ON rep.id_captura=c.id_captura
+            LEFT JOIN detecciones d
+                ON c.id_deteccion=d.id_deteccion
+            LEFT JOIN especies e
+                ON d.id_especie=e.id_especie
+            WHERE rep.id_usuario=?
+              AND a.id_administrador=?
+              AND rep.fecha_generacion>=a.fecha_inicio
+              AND (
+                  a.fecha_fin IS NULL
+                  OR rep.fecha_generacion<a.fecha_fin
+              )
+            ORDER BY rep.fecha_generacion DESC
+        `, [idUsuario, idAdministrador]);
 
         const completos = reportes.filter(
             reporte => reporte.estado_reporte === "Completo"
@@ -821,25 +746,17 @@ export const getReportesHistorialVeedor = async (req, res) => {
         return res.status(200).json({
             estado: 1,
             mensaje: "Historial del veedor obtenido correctamente",
-
             administrador: administradores[0],
-
             veedor: veedores[0],
-
             resumen: {
                 total: reportes.length,
                 completos,
                 incompletos
             },
-
             data: reportes
         });
-
     } catch (error) {
-        console.error(
-            "❌ Error getReportesHistorialVeedor:",
-            error
-        );
+        console.error("❌ Error getReportesHistorialVeedor:", error);
 
         return res.status(500).json({
             estado: 0,
@@ -864,10 +781,8 @@ export const guardarUrlCamaraAdmin = async (req, res) => {
             });
         }
 
-        // Limpiar diagonales finales
         urlCamara = urlCamara.replace(/\/+$/, '');
 
-        // Validar que el usuario sea administrador activo (id_rol = 1)
         const [admin] = await conmysql.query(
             `SELECT id_usuario FROM usuarios WHERE id_usuario = ? AND id_rol = 1 AND estado = 1 LIMIT 1`,
             [idAdministrador]
@@ -880,7 +795,6 @@ export const guardarUrlCamaraAdmin = async (req, res) => {
             });
         }
 
-        // Insertar o actualizar la URL (Hora de Ecuador UTC-5)
         await conmysql.query(
             `INSERT INTO configuracion_camara (id_administrador, url_camara, fecha_actualizacion)
              VALUES (?, ?, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR))
@@ -904,9 +818,8 @@ export const guardarUrlCamaraAdmin = async (req, res) => {
     }
 };
 
-
 /* ======================================================
-   OBTENER URL DE CÁMARA VINCULADA
+   OBTENER URL DE CÁMARA VINCULADA + VEEDORES ACTIVOS
    (Para Administrador o Veedor asignado)
 ====================================================== */
 export const obtenerUrlCamaraVinculada = async (req, res) => {
@@ -954,36 +867,48 @@ export const obtenerUrlCamaraVinculada = async (req, res) => {
             }
         }
 
-        // Si es veedor y no tiene administrador vinculado
         if (!idAdminObjetivo) {
             return res.status(200).json({
                 estado: 1,
                 url_camara: null,
+                veedores: [],
+                total_veedores: 0,
                 mensaje: 'El veedor no tiene un administrador asignado.'
             });
         }
 
         // 2. Consultar la URL configurada por ese Administrador
         const [config] = await conmysql.query(
-            `SELECT url_camara, fecha_actualizacion 
+            `SELECT url_camara, DATE_FORMAT(fecha_actualizacion, '%Y-%m-%d %H:%i:%s') AS fecha_actualizacion 
              FROM configuracion_camara 
              WHERE id_administrador = ? 
              LIMIT 1`,
             [idAdminObjetivo]
         );
 
-        if (config.length === 0 || !config[0].url_camara) {
-            return res.status(200).json({
-                estado: 1,
-                url_camara: null,
-                mensaje: 'El administrador aún no ha habilitado la cámara.'
-            });
-        }
+        // 3. Consultar la lista de veedores activos vinculados a este administrador
+        const [veedores] = await conmysql.query(
+            `SELECT 
+                u.id_usuario,
+                u.nombre,
+                u.apellido,
+                u.correo,
+                u.estado
+             FROM administrador a
+             INNER JOIN usuarios u ON a.id_usuario = u.id_usuario
+             WHERE a.id_administrador = ? 
+               AND a.fecha_fin IS NULL 
+               AND u.id_rol = 2
+             ORDER BY u.nombre ASC, u.apellido ASC`,
+            [idAdminObjetivo]
+        );
 
         return res.status(200).json({
             estado: 1,
-            url_camara: config[0].url_camara,
-            fecha_actualizacion: config[0].fecha_actualizacion
+            url_camara: config.length > 0 ? config[0].url_camara : null,
+            fecha_actualizacion: config.length > 0 ? config[0].fecha_actualizacion : null,
+            total_veedores: veedores.length,
+            veedores: veedores
         });
     } catch (error) {
         console.error('❌ Error obtenerUrlCamaraVinculada:', error);
