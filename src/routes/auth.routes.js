@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
     registrarUsuario,
+    verificarCorreo,
     loginUsuario,
     solicitarRecuperacion,
     restablecerPassword,
@@ -13,6 +14,7 @@ import {
 const router = Router();
 
 router.post("/registro", registrarUsuario);
+router.post("/verificar-correo", verificarCorreo);
 router.post("/login", loginUsuario);
 router.post("/recuperar", solicitarRecuperacion);
 router.get("/validar-reset/:token", validarTokenRecuperacion);

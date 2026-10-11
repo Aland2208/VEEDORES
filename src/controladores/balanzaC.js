@@ -86,7 +86,7 @@ export const registrarPeso = async (req, res) => {
         });
 
     } catch (error) {
-        console.log(error);
+        
         res.status(500).json({
             estado: 0,
             mensaje: "Error del servidor"
@@ -126,7 +126,7 @@ export const pesoLive = (req, res) => {
         });
 
     } catch (error) {
-        console.log(error);
+        
         res.status(500).json({
             estado: 0,
             mensaje: "Error servidor"
@@ -162,7 +162,7 @@ export const getPesos = async (req, res) => {
         });
 
     } catch (error) {
-        console.log(error);
+        
         res.status(500).json({
             estado: 0,
             mensaje: "Error del servidor"
@@ -207,7 +207,7 @@ export const getPesoByID = async (req, res) => {
         res.json(result[0]);
 
     } catch (error) {
-        console.log(error);
+        
         res.status(500).json({
 
             estado: 0,
@@ -249,7 +249,7 @@ export const ultimoPeso = async (req, res) => {
         });
 
     } catch (error) {
-        console.log(error);
+        
         res.status(500).json({
             estado: 0,
             mensaje: "Error"
@@ -283,7 +283,7 @@ export const desactivarPeso = async (req, res) => {
         });
 
     } catch (error) {
-        console.log(error);
+        
         res.status(500).json({
             estado: 0,
             mensaje: "Error del servidor"
@@ -319,7 +319,7 @@ export const activarPeso = async (req, res) => {
         });
 
     } catch (error) {
-        console.log(error);
+        
         res.status(500).json({
             estado: 0,
             mensaje: "Error del servidor"
@@ -347,7 +347,7 @@ export const taraRealizada = (req, res) => {
         });
 
     } catch (error) {
-        console.log(error);
+        
         res.status(500).json({
             estado: 0,
             mensaje: "Error del servidor"

@@ -18,8 +18,8 @@ export const getDashboardVeedor=async(req,res)=>{
 
         const fechaEcuador=fechaResultado[0].fecha_ecuador;
 
-        console.log('📊 Dashboard usuario:',idUsuario);
-        console.log('🇪🇨 Fecha Ecuador:',fechaEcuador);
+        
+        
 
         // RESUMEN GENERAL
         const [resumen]=await conmysql.query(`
@@ -77,9 +77,9 @@ export const getDashboardVeedor=async(req,res)=>{
             ORDER BY hora ASC
         `,[idUsuario,fechaEcuador,fechaEcuador]);
 
-        console.log('📌 Resumen:',resumen[0]);
-        console.log('🐟 Especies:',especies.length);
-        console.log('⏰ Actividad:',actividad.length);
+        
+        
+        
 
         return res.status(200).json({
             estado:1,
@@ -108,7 +108,7 @@ export const getDashboardVeedor=async(req,res)=>{
         });
 
     }catch(error){
-        console.error('❌ Error getDashboardVeedor:',error);
+        
 
         return res.status(500).json({
             estado:0,
@@ -613,12 +613,12 @@ export const getDashboardAdministrador=async(req,res)=>{
   });
 
  }catch(error){
-  console.error('❌ Error getDashboardAdministrador:',error);
+  
 
   return res.status(500).json({
    estado:0,
    mensaje:'Error al obtener el dashboard general',
-   error:error.message
+   error:"Error interno"
   });
  }
 };

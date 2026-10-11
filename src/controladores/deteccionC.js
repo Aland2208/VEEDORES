@@ -147,10 +147,7 @@ export const registrarDeteccion = async (req, res) => {
 
     catch (error) {
 
-        console.error(
-            "Error registrarDeteccion:",
-            error
-        );
+        
 
 
         res.status(500).json({
@@ -213,10 +210,7 @@ export const getDetecciones = async (req, res) => {
 
     catch (error) {
 
-        console.error(
-            "Error getDetecciones:",
-            error
-        );
+        
 
 
         res.status(500).json({
@@ -295,10 +289,7 @@ export const getDeteccionByID = async (req, res) => {
 
     catch (error) {
 
-        console.error(
-            "Error getDeteccionByID:",
-            error
-        );
+        
 
 
         res.status(500).json({

@@ -1,5 +1,6 @@
 import { conmysql } from '../db.js';
 import bcrypt from 'bcrypt';
+import { esCorreoValido, passwordValida } from '../utilidades/correo.js';
 
 /* LISTAR OBSERVADORES */
 export const getObservadores=async(req,res)=>{
@@ -23,7 +24,7 @@ export const getObservadores=async(req,res)=>{
             data:usuarios
         });
     }catch(error){
-        console.error('❌ Error getObservadores:',error);
+        
         return res.status(500).json({
             estado:0,
             mensaje:'Error al obtener los observadores.'
@@ -49,10 +50,17 @@ export const crearObservador=async(req,res)=>{
             });
         }
 
-        if(password.length<6){
+        if(nombre.length>100||apellido.length>100||!esCorreoValido(correo)){
             return res.status(400).json({
                 estado:0,
-                mensaje:'La contraseña debe tener al menos 6 caracteres.'
+                mensaje:'Nombre, apellido o correo no válidos.'
+            });
+        }
+
+        if(typeof password!=='string'||!passwordValida(password)){
+            return res.status(400).json({
+                estado:0,
+                mensaje:'La contraseña debe tener entre 8 y 72 bytes e incluir mayúscula, minúscula, número y carácter especial.'
             });
         }
 
@@ -105,7 +113,7 @@ export const crearObservador=async(req,res)=>{
             }
         });
     }catch(error){
-        console.error('❌ Error crearObservador:',error);
+        
         return res.status(500).json({
             estado:0,
             mensaje:'Error al crear el observador.'
@@ -136,6 +144,13 @@ export const editarObservador=async(req,res)=>{
             return res.status(400).json({
                 estado:0,
                 mensaje:'Nombre, apellido y correo son obligatorios.'
+            });
+        }
+
+        if(nombre.length>100||apellido.length>100||!esCorreoValido(correo)){
+            return res.status(400).json({
+                estado:0,
+                mensaje:'Nombre, apellido o correo no válidos.'
             });
         }
 
@@ -190,7 +205,7 @@ export const editarObservador=async(req,res)=>{
             }
         });
     }catch(error){
-        console.error('❌ Error editarObservador:',error);
+        
         return res.status(500).json({
             estado:0,
             mensaje:'Error al actualizar el observador.'
@@ -252,7 +267,7 @@ export const cambiarEstadoObservador=async(req,res)=>{
             }
         });
     }catch(error){
-        console.error('❌ Error cambiarEstadoObservador:',error);
+        
         return res.status(500).json({
             estado:0,
             mensaje:'Error al cambiar el estado del observador.'

@@ -197,10 +197,7 @@ export const getReporteCapturas = async (req, res) => {
 
     catch (error) {
 
-        console.error(
-            "❌ Error getReporteCapturas:",
-            error
-        );
+        
 
 
         res.status(500).json({
@@ -465,10 +462,7 @@ export const getReportePorFechas = async (req, res) => {
 
     catch (error) {
 
-        console.error(
-            "❌ Error getReportePorFechas:",
-            error
-        );
+        
 
 
         res.status(500).json({
@@ -579,10 +573,7 @@ export const getResumenEspecies = async (req, res) => {
 
     catch (error) {
 
-        console.error(
-            "❌ Error getResumenEspecies:",
-            error
-        );
+        
 
 
         res.status(500).json({
@@ -639,10 +630,7 @@ export const getTiposReporte = async (req, res) => {
 
     catch (error) {
 
-        console.error(
-            "❌ Error getTiposReporte:",
-            error
-        );
+        
 
 
         res.status(500).json({
@@ -688,18 +676,11 @@ export const getReportesPendientesHoy = async (req, res) => {
         }
 
 
-        console.log(
-            "=========================================="
-        );
+        
 
-        console.log(
-            "📄 CONSULTANDO REPORTES PENDIENTES DEL DÍA"
-        );
+        
 
-        console.log(
-            "👤 Usuario:",
-            id_usuario
-        );
+        
 
 
         // ==============================================
@@ -976,24 +957,13 @@ export const getReportesPendientesHoy = async (req, res) => {
         // RESPUESTA
         // ==============================================
 
-        console.log(
-            "📊 Registros encontrados:",
-            totalRegistros
-        );
+        
 
-        console.log(
-            "⚖️ Peso total:",
-            pesoTotal
-        );
+        
 
-        console.log(
-            "🎯 Confianza promedio:",
-            confianzaPromedio
-        );
+        
 
-        console.log(
-            "=========================================="
-        );
+        
 
 
         return res.status(200).json({
@@ -1032,10 +1002,7 @@ export const getReportesPendientesHoy = async (req, res) => {
 
     catch (error) {
 
-        console.error(
-            "❌ Error getReportesPendientesHoy:",
-            error
-        );
+        
 
 
         return res.status(500).json({
@@ -1046,7 +1013,7 @@ export const getReportesPendientesHoy = async (req, res) => {
                 "Error del servidor",
 
             error:
-                error.message
+                "Error interno"
 
         });
     }
@@ -1074,9 +1041,10 @@ const validarDatosGeneracion = ({
 
     if (
         !Array.isArray(ids_reportes) ||
-        ids_reportes.length === 0
+        ids_reportes.length === 0 ||
+        ids_reportes.length > 500
     ) {
-        return "Debe enviar al menos un id_reporte";
+        return "Debe enviar entre 1 y 500 ids de reportes";
     }
 
     if (!id_tipo_reporte) {
@@ -1088,6 +1056,10 @@ const validarDatosGeneracion = ({
         String(titulo).trim() === ""
     ) {
         return "Debe ingresar el título del reporte";
+    }
+
+    if (String(titulo).trim().length > 150) {
+        return "El título no puede superar 150 caracteres";
     }
 
     return null;
@@ -1364,10 +1336,7 @@ const descargarImagen = async (
 
         if (!respuesta.ok) {
 
-            console.warn(
-                "⚠️ No se pudo descargar imagen:",
-                imagenUrl
-            );
+            
 
             return null;
         }
@@ -1385,10 +1354,7 @@ const descargarImagen = async (
 
     catch (error) {
 
-        console.warn(
-            "⚠️ Error descargando imagen:",
-            error.message
-        );
+        
 
         return null;
     }
@@ -2193,10 +2159,7 @@ const crearPDFBuffer = async ({
 
                         catch (error) {
 
-                            console.warn(
-                                "⚠️ PDFKit no pudo insertar una imagen:",
-                                error.message
-                            );
+                            
 
 
                             doc
@@ -2499,12 +2462,12 @@ export const generarPDFReporteAdmin = async (req, res) => {
         return res.status(200).send(pdfBuffer);
 
     } catch (error) {
-        console.error("❌ Error generarPDFReporteAdmin:", error);
+        
 
         return res.status(500).json({
             estado: 0,
             mensaje: "Error al generar el PDF del reporte",
-            error: error.message
+            error: "Error interno"
         });
     }
 };
@@ -2522,13 +2485,9 @@ export const generarPDFEspecie = async (
 
     try {
 
-        console.log(
-            "=========================================="
-        );
+        
 
-        console.log(
-            "📄 GENERANDO PDF POR ESPECIE"
-        );
+        
 
 
         // ==============================================
@@ -2550,20 +2509,11 @@ export const generarPDFEspecie = async (
         } = req.body;
 
 
-        console.log(
-            "👤 Usuario:",
-            id_usuario
-        );
+        
 
-        console.log(
-            "🐟 Especie:",
-            id_especie
-        );
+        
 
-        console.log(
-            "📋 Reportes:",
-            ids_reportes
-        );
+        
 
 
         // ==============================================
@@ -2630,10 +2580,7 @@ export const generarPDFEspecie = async (
             );
 
 
-        console.log(
-            "📊 Capturas válidas:",
-            reportes.length
-        );
+        
 
 
         // ==============================================
@@ -2663,11 +2610,7 @@ export const generarPDFEspecie = async (
         }
 
 
-        console.log(
-            "📦 PDF generado:",
-            pdfBuffer.length,
-            "bytes"
-        );
+        
 
 
         // ==============================================
@@ -2699,9 +2642,7 @@ export const generarPDFEspecie = async (
         );
 
 
-        console.log(
-            "✅ archivo_pdf actualizado a 1"
-        );
+        
 
 
         // ==============================================
@@ -2754,14 +2695,9 @@ export const generarPDFEspecie = async (
         );
 
 
-        console.log(
-            "⬇️ Enviando PDF:",
-            nombreArchivo
-        );
+        
 
-        console.log(
-            "=========================================="
-        );
+        
 
 
         return res
@@ -2772,10 +2708,7 @@ export const generarPDFEspecie = async (
 
     catch (error) {
 
-        console.error(
-            "❌ Error generarPDFEspecie:",
-            error
-        );
+        
 
 
         // IMPORTANTE:
@@ -2794,7 +2727,7 @@ export const generarPDFEspecie = async (
                     estado: 0,
 
                     mensaje:
-                        error.message ||
+                        "Error interno" ||
                         "Error al generar el PDF"
 
                 });
@@ -2857,13 +2790,9 @@ export const generarCSVEspecie = async (
 
     try {
 
-        console.log(
-            "=========================================="
-        );
+        
 
-        console.log(
-            "📊 GENERANDO CSV POR ESPECIE"
-        );
+        
 
 
         // ==============================================
@@ -3076,9 +3005,7 @@ export const generarCSVEspecie = async (
         );
 
 
-        console.log(
-            "✅ archivo_csv actualizado a 1"
-        );
+        
 
 
         // ==============================================
@@ -3131,14 +3058,9 @@ export const generarCSVEspecie = async (
         );
 
 
-        console.log(
-            "⬇️ Enviando CSV:",
-            nombreArchivo
-        );
+        
 
-        console.log(
-            "=========================================="
-        );
+        
 
 
         return res
@@ -3149,10 +3071,7 @@ export const generarCSVEspecie = async (
 
     catch (error) {
 
-        console.error(
-            "❌ Error generarCSVEspecie:",
-            error
-        );
+        
 
 
         if (!res.headersSent) {
@@ -3167,7 +3086,7 @@ export const generarCSVEspecie = async (
                     estado: 0,
 
                     mensaje:
-                        error.message ||
+                        "Error interno" ||
                         "Error al generar el CSV"
 
                 });
@@ -3198,11 +3117,11 @@ export const enviarReporteEspecie = async (req, res) => {
     try {
         const { id_usuario, id_especie, ids_reportes, id_tipo_reporte, titulo } = req.body;
 
-        console.log("==========================================");
-        console.log("📤 ENVIANDO REPORTE POR ESPECIE");
-        console.log("👤 Usuario:", id_usuario);
-        console.log("🐟 Especie:", id_especie);
-        console.log("📋 Reportes:", ids_reportes);
+        
+        
+        
+        
+        
 
         // Validaciones básicas
         const idUsuario = Number(id_usuario);
@@ -3222,8 +3141,8 @@ export const enviarReporteEspecie = async (req, res) => {
         if (!tituloLimpio)
             return res.status(400).json({ estado: 0, mensaje: "Ingrese un título para el reporte" });
 
-        if (tituloLimpio.length > 255)
-            return res.status(400).json({ estado: 0, mensaje: "El título no puede superar 255 caracteres" });
+        if (tituloLimpio.length > 150)
+            return res.status(400).json({ estado: 0, mensaje: "El título no puede superar 150 caracteres" });
 
         if (!Array.isArray(ids_reportes) || ids_reportes.length === 0)
             return res.status(400).json({ estado: 0, mensaje: "No existen reportes para enviar" });
@@ -3335,11 +3254,11 @@ export const enviarReporteEspecie = async (req, res) => {
 
         await conexion.commit();
 
-        console.log("✅ Reporte enviado correctamente");
-        console.log("📋 Registros actualizados:", ids);
-        console.log("📝 Tipo:", tipos[0].nombre_tipo);
-        console.log("📌 Título:", tituloLimpio);
-        console.log("==========================================");
+        
+        
+        
+        
+        
 
         return res.status(200).json({
             estado: 1,
@@ -3360,7 +3279,7 @@ export const enviarReporteEspecie = async (req, res) => {
             try { await conexion.rollback(); } catch { }
         }
 
-        console.error("❌ Error enviarReporteEspecie:", error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -3395,6 +3314,13 @@ export const getHistorialReportes = async (req, res) => {
         const limitePagina = Math.min(Math.max(Number(limite) || 10, 1), 50);
         const offset = (paginaActual - 1) * limitePagina;
 
+        if (String(busqueda || '').length > 150) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "La búsqueda no puede superar 150 caracteres."
+            });
+        }
+
         if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
             return res.status(400).json({
                 estado: 0,
@@ -3402,11 +3328,11 @@ export const getHistorialReportes = async (req, res) => {
             });
         }
 
-        console.log("==========================================");
-        console.log("📚 CONSULTANDO HISTORIAL DE REPORTES");
-        console.log("👤 Usuario:", idUsuario);
-        console.log("📄 Página:", paginaActual);
-        console.log("🔢 Límite:", limitePagina);
+        
+        
+        
+        
+        
 
         // Condiciones dinámicas
         const condiciones = [
@@ -3525,9 +3451,9 @@ export const getHistorialReportes = async (req, res) => {
             LIMIT ? OFFSET ?
         `, [...parametros, limitePagina, offset]);
 
-        console.log("📊 Reportes encontrados:", total);
-        console.log("📄 Grupos devueltos:", grupos.length);
-        console.log("==========================================");
+        
+        
+        
 
         return res.status(200).json({
             estado: 1,
@@ -3544,7 +3470,7 @@ export const getHistorialReportes = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error getHistorialReportes:", error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -3567,7 +3493,7 @@ export const getEspeciesFiltro = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error getEspeciesFiltro:", error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -3719,7 +3645,7 @@ export const getDetalleReporte = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error getDetalleReporte:", error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -3862,11 +3788,11 @@ export const getReportesAdministradorHoy = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error getReportesAdministradorHoy:", error);
+        
         return res.status(500).json({
             estado: 0,
             mensaje: "Error al obtener los reportes del administrador",
-            error: error.message
+            error: "Error interno"
         });
     }
 };
@@ -3893,6 +3819,9 @@ export const editarTituloReporteAdmin = async (req, res) => {
         }
 
         const tituloLimpio = String(titulo).trim();
+        if (tituloLimpio.length > 150) {
+            return res.status(400).json({ estado: 0, mensaje: "El título no puede superar 150 caracteres" });
+        }
 
         // Validar administrador
         const [administradores] = await conmysql.query(`
@@ -3951,11 +3880,11 @@ export const editarTituloReporteAdmin = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error editarTituloReporteAdmin:", error);
+        
         return res.status(500).json({
             estado: 0,
             mensaje: "Error al actualizar el título del reporte",
-            error: error.message
+            error: "Error interno"
         });
     }
 };
@@ -3988,6 +3917,9 @@ export const editarReporteAdmin = async (req, res) => {
         }
 
         const tituloLimpio = String(titulo).trim();
+        if (tituloLimpio.length > 150) {
+            return res.status(400).json({ estado: 0, mensaje: "El título no puede superar 150 caracteres" });
+        }
 
         // Validar administrador
         const [administradores] = await conmysql.query(`
@@ -4065,11 +3997,11 @@ export const editarReporteAdmin = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error editarReporteAdmin:", error);
+        
         return res.status(500).json({
             estado: 0,
             mensaje: "Error al actualizar el reporte",
-            error: error.message
+            error: "Error interno"
         });
     }
 };
@@ -4256,12 +4188,12 @@ export const generarCSVReporteAdmin = async (req, res) => {
         return res.status(200).send(csv);
 
     } catch (error) {
-        console.error("❌ Error generarCSVReporteAdmin:", error);
+        
 
         return res.status(500).json({
             estado: 0,
             mensaje: "Error al generar el CSV del reporte",
-            error: error.message
+            error: "Error interno"
         });
     }
 };

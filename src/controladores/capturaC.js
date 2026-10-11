@@ -151,7 +151,7 @@ export const registrarCaptura = async (req, res) => {
                 io.emit("nuevaCaptura", registro[0]);
             }
         } catch (socketError) {
-            console.error("⚠️ Error enviando WebSocket:", socketError);
+            
         }
 
         return res.status(201).json({
@@ -165,11 +165,11 @@ export const registrarCaptura = async (req, res) => {
             try { await connection.rollback(); } catch { }
             connection.release();
         }
-        console.error("❌ Error registrarCaptura:", error);
+        
         return res.status(500).json({
             estado: 0,
             mensaje: "Error del servidor al registrar la captura",
-            error: error.message
+            error: "Error interno"
         });
     }
 };
@@ -270,11 +270,11 @@ export const anularCaptura = async (req, res) => {
             try { await connection.rollback(); } catch { }
             connection.release();
         }
-        console.error("❌ Error anularCaptura:", error);
+        
         return res.status(500).json({
             estado: 0,
             mensaje: "Error interno al anular la captura",
-            error: error.message
+            error: "Error interno"
         });
     }
 };

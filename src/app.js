@@ -13,7 +13,7 @@ import usuariosR from './routes/usuario.routes.js';
 
 const app = express();
 
-app.use(express.json()); //la app trabajara con json
+app.use(express.json({ limit: '1mb' })); // la app trabajara con JSON limitado
 
 const corsOptions = {
   origin: '*',
@@ -39,5 +39,27 @@ app.use((req, resp, next) => {
         message: 'Endpoint not fount'
     })
 })
+
+app.use((error, req, res, next) => {
+    if (res.headersSent) return next(error);
+
+    const status = Number(error.statusCode || error.status);
+
+    if (status === 400) {
+        return res.status(400).json({
+            message: 'La solicitud no es válida.'
+        });
+    }
+
+    if (status === 413) {
+        return res.status(413).json({
+            message: 'La solicitud supera el tamaño permitido.'
+        });
+    }
+
+    return res.status(500).json({
+        message: 'Error interno del servidor.'
+    });
+});
 
 export default app;

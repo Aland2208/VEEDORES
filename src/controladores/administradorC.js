@@ -38,7 +38,7 @@ export const buscarAdministradorPorCorreo = async (req, res) => {
             data: administradores[0]
         });
     } catch (error) {
-        console.error('❌ Error buscarAdministradorPorCorreo:', error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -93,7 +93,7 @@ export const getAdministradorActual = async (req, res) => {
             data: resultado[0]
         });
     } catch (error) {
-        console.error('❌ Error getAdministradorActual:', error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -140,7 +140,7 @@ export const getUsuariosAdministrador = async (req, res) => {
             data: usuarios
         });
     } catch (error) {
-        console.error('❌ Error getUsuariosAdministrador:', error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -178,7 +178,7 @@ export const getUsuariosDisponibles = async (req, res) => {
             data: usuarios
         });
     } catch (error) {
-        console.error('❌ Error getUsuariosDisponibles:', error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -281,7 +281,7 @@ export const asignarUsuario = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('❌ Error asignarUsuario:', error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -412,7 +412,7 @@ export const reasignarUsuario = async (req, res) => {
             await conexion.rollback();
         }
 
-        console.error('❌ Error reasignarUsuario:', error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -463,7 +463,7 @@ export const quitarUsuarioAdministrador = async (req, res) => {
             mensaje: 'Asignación finalizada correctamente.'
         });
     } catch (error) {
-        console.error('❌ Error quitarUsuarioAdministrador:', error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -514,7 +514,7 @@ export const getHistorialUsuario = async (req, res) => {
             data: historial
         });
     } catch (error) {
-        console.error('❌ Error getHistorialUsuario:', error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -612,12 +612,12 @@ export const getVeedoresHistorial = async (req, res) => {
             data: veedores
         });
     } catch (error) {
-        console.error("❌ Error getVeedoresHistorial:", error);
+        
 
         return res.status(500).json({
             estado: 0,
             mensaje: "Error al obtener el historial de veedores",
-            error: error.message
+            error: "Error interno"
         });
     }
 };
@@ -756,12 +756,12 @@ export const getReportesHistorialVeedor = async (req, res) => {
             data: reportes
         });
     } catch (error) {
-        console.error("❌ Error getReportesHistorialVeedor:", error);
+        
 
         return res.status(500).json({
             estado: 0,
             mensaje: "Error al obtener los reportes del veedor",
-            error: error.message
+            error: "Error interno"
         });
     }
 };
@@ -778,6 +778,30 @@ export const guardarUrlCamaraAdmin = async (req, res) => {
             return res.status(400).json({
                 estado: 0,
                 mensaje: 'El ID del administrador y la URL son obligatorios.'
+            });
+        }
+
+        if (urlCamara.length > 2048) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: 'La URL no puede superar 2048 caracteres.'
+            });
+        }
+
+        let urlValidada;
+        try {
+            urlValidada = new URL(urlCamara);
+        } catch {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: 'Ingresa una URL HTTPS válida.'
+            });
+        }
+
+        if (urlValidada.protocol !== 'https:') {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: 'La URL debe comenzar con HTTPS.'
             });
         }
 
@@ -810,7 +834,7 @@ export const guardarUrlCamaraAdmin = async (req, res) => {
             data: { url_camara: urlCamara }
         });
     } catch (error) {
-        console.error('❌ Error guardarUrlCamaraAdmin:', error);
+        
         return res.status(500).json({
             estado: 0,
             mensaje: 'Error del servidor al configurar la cámara.'
@@ -911,7 +935,7 @@ export const obtenerUrlCamaraVinculada = async (req, res) => {
             veedores: veedores
         });
     } catch (error) {
-        console.error('❌ Error obtenerUrlCamaraVinculada:', error);
+        
         return res.status(500).json({
             estado: 0,
             mensaje: 'Error del servidor al obtener la cámara vinculada.'

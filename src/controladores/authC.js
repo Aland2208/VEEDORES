@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { conmysql } from "../db.js";
+import { esCorreoValido, passwordValida } from "../utilidades/correo.js";
 
 // ==========================================
 // CONTROL DE INTENTOS DE LOGIN
@@ -18,28 +19,6 @@ const palabrasProhibidas = [
     'pendejo', 'pendeja', 'idiota', 'maricon', 'perra', 'perro', 'chucha', 'hdp',
     'admin', 'administrador', 'root', 'test', 'prueba', 'usuario', 'null', 'undefined',
     'anonimo', 'nobody', 'fake', 'bot', 'observador', 'veedor', 'tonto', 'bobo', 'loco'
-];
-
-// ==========================================
-// LISTA ESTRICTA DE PROVEEDORES PERMITIDOS
-// ==========================================
-const dominiosValidosBackend = [
-    'gmail.com',
-    'outlook.com',
-    'outlook.es',
-    'hotmail.com',
-    'hotmail.es',
-    'yahoo.com',
-    'yahoo.es',
-    'icloud.com',
-    'live.com',
-    'msn.com',
-    'upse.edu.ec',
-    'ug.edu.ec',
-    'espe.edu.ec',
-    'epn.edu.ec',
-    'protonmail.com',
-    'mail.com'
 ];
 
 const esNombreValidoBackend = (texto) => {
@@ -91,28 +70,12 @@ const esNombreValidoBackend = (texto) => {
 // ==========================================
 // VALIDACIÓN ESTRICTA DE CORREO (BACKEND)
 // ==========================================
-const esCorreoValidoBackend = (correo) => {
-    const limpio = String(correo || '').trim().toLowerCase();
-    const regexEmail = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!regexEmail.test(limpio)) return false;
-
-    const partes = limpio.split('@');
-    if (partes.length !== 2) return false;
-
-    const usuario = partes[0];
-    const dominio = partes[1];
-
-    if (usuario.length < 3 || usuario.length > 35) return false;
-    if (/(.)\1\1\1/.test(usuario)) return false;
-
-    // Solo dominios válidos de proveedores reales
-    return dominiosValidosBackend.includes(dominio);
-};
-
 // ==========================================
 // REGISTRAR USUARIO
 // ==========================================
 export const registrarUsuario = async (req, res) => {
+    let conexion;
+
     try {
         let { nombre, apellido, correo, password, id_rol } = req.body;
 
@@ -121,7 +84,7 @@ export const registrarUsuario = async (req, res) => {
         correo = String(correo || '').trim().toLowerCase();
 
         // 1. Validar campos obligatorios
-        if (!nombre || !apellido || !correo || !password) {
+        if (!nombre || !apellido || !correo || typeof password !== 'string') {
             return res.status(400).json({
                 estado: 0,
                 mensaje: "Todos los campos son obligatorios."
@@ -145,10 +108,32 @@ export const registrarUsuario = async (req, res) => {
         }
 
         // 4. Validar formato y dominio de correo
-        if (!esCorreoValidoBackend(correo)) {
+        if (!esCorreoValido(correo)) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: "El correo electrónico no es válido. Use un proveedor reconocido (Gmail, Outlook, Hotmail, etc.)."
+            });
+        }
+
+        if (!passwordValida(password)) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "La contraseña debe tener entre 8 y 72 bytes e incluir mayúscula, minúscula, número y carácter especial."
+            });
+        }
+
+        if (![1, 2].includes(Number(id_rol))) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "El tipo de cuenta no es válido."
+            });
+        }
+
+        if (!process.env.API_BREVO || !process.env.FRONTEND_URL) {
+            
+            return res.status(503).json({
+                estado: 0,
+                mensaje: "No se puede enviar el correo de verificación en este momento."
             });
         }
 
@@ -158,24 +143,66 @@ export const registrarUsuario = async (req, res) => {
 
         const nombreFormateado = formatearPalabra(nombre);
         const apellidoFormateado = formatearPalabra(apellido);
-
         const salt = await bcrypt.genSalt(10);
         const hash = await bcrypt.hash(password, salt);
+        const token = crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+        const expira = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-        const [resultado] = await conmysql.query(
-            `INSERT INTO usuarios (nombre, apellido, correo, password_hash, id_rol)
-             VALUES (?, ?, ?, ?, ?)`,
-            [nombreFormateado, apellidoFormateado, correo, hash, id_rol || 2]
+        conexion = await conmysql.getConnection();
+        await conexion.beginTransaction();
+
+        await conexion.query(
+            `INSERT INTO usuarios
+                (nombre, apellido, correo, password_hash, id_rol, estado,
+                 token_verificacion_correo, verificacion_correo_expira)
+             VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
+            [nombreFormateado, apellidoFormateado, correo, hash, Number(id_rol), tokenHash, expira]
         );
 
-        res.status(201).json({
+        const urlFrontend = process.env.FRONTEND_URL.replace(/\/+$/, "");
+        const urlVerificacion = `${urlFrontend}/verificar-correo?token=${token}`;
+        const respuestaCorreo = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            signal: AbortSignal.timeout(10000),
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'api-key': process.env.API_BREVO
+            },
+            body: JSON.stringify({
+                sender: { name: 'VIGÍA', email: 'veedoresbu@gmail.com' },
+                to: [{ email: correo }],
+                subject: 'Confirma tu correo electrónico | VIGÍA',
+                htmlContent: `
+                    <div style="font-family:Arial,sans-serif;color:#071627;max-width:600px;margin:auto">
+                        <h1>Confirma tu correo</h1>
+                        <p>Para activar tu cuenta de VIGÍA, confirma que puedes recibir mensajes en esta dirección.</p>
+                        <p><a href="${urlVerificacion}">Verificar correo electrónico</a></p>
+                        <p>Este enlace vence en 24 horas. Si no solicitaste esta cuenta, ignora este mensaje.</p>
+                    </div>`
+            })
+        });
+
+        if (!respuestaCorreo.ok) {
+            await conexion.rollback();
+            
+            return res.status(502).json({
+                estado: 0,
+                mensaje: "No se pudo enviar el correo de verificación. Intenta nuevamente."
+            });
+        }
+
+        await respuestaCorreo.text();
+        await conexion.commit();
+
+        return res.status(201).json({
             estado: 1,
-            mensaje: "Usuario registrado con éxito",
-            id_usuario: resultado.insertId
+            mensaje: "Cuenta creada. Revisa tu correo y confirma el enlace para activarla."
         });
 
     } catch (error) {
-        console.error("❌ Error registrarUsuario:", error);
+        if (conexion) await conexion.rollback();
 
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({
@@ -184,9 +211,54 @@ export const registrarUsuario = async (req, res) => {
             });
         }
 
-        res.status(500).json({
+        
+        return res.status(500).json({
             estado: 0,
             mensaje: "Error del servidor al registrar."
+        });
+    } finally {
+        conexion?.release();
+    }
+};
+
+export const verificarCorreo = async (req, res) => {
+    try {
+        const token = String(req.body?.token || "");
+        if (!/^[a-f0-9]{64}$/i.test(token)) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "El enlace de verificación no es válido o ya venció."
+            });
+        }
+
+        const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+        const [resultado] = await conmysql.query(
+            `UPDATE usuarios
+             SET estado=1,
+                 token_verificacion_correo=NULL,
+                 verificacion_correo_expira=NULL
+             WHERE token_verificacion_correo=?
+               AND verificacion_correo_expira>NOW()
+               AND estado=0`,
+            [tokenHash]
+        );
+
+        if (resultado.affectedRows !== 1) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "El enlace de verificación no es válido o ya venció."
+            });
+        }
+
+        return res.status(200).json({
+            estado: 1,
+            mensaje: "Correo verificado. Ya puedes iniciar sesión."
+        });
+    } catch (error) {
+        
+        return res.status(500).json({
+            estado: 0,
+            mensaje: "No se pudo verificar el correo. Intenta nuevamente."
         });
     }
 };
@@ -201,7 +273,7 @@ export const loginUsuario = async (req, res) => {
         correo = String(correo || '').trim().toLowerCase();
         password = String(password || '');
 
-        if (!correo || !password) {
+        if (!correo || Buffer.byteLength(password, 'utf8') > 72 || !password) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: 'Correo y contraseña son obligatorios.'
@@ -230,7 +302,7 @@ export const loginUsuario = async (req, res) => {
         }
 
         const [usuarios] = await conmysql.query(
-            `SELECT * FROM usuarios WHERE correo=? AND estado=1`,
+            `SELECT * FROM usuarios WHERE correo=?`,
             [correo]
         );
 
@@ -283,6 +355,15 @@ export const loginUsuario = async (req, res) => {
             });
         }
 
+        if (Number(usuario.estado) !== 1) {
+            return res.status(403).json({
+                estado: 0,
+                mensaje: usuario.token_verificacion_correo
+                    ? 'Debes verificar tu correo antes de iniciar sesión.'
+                    : 'La cuenta está desactivada.'
+            });
+        }
+
         intentosLogin.delete(clave);
 
         const token = jwt.sign(
@@ -309,7 +390,7 @@ export const loginUsuario = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error loginUsuario:", error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -323,7 +404,13 @@ export const loginUsuario = async (req, res) => {
 // ==========================================
 export const solicitarRecuperacion = async (req, res) => {
     try {
-        const { correo } = req.body;
+        const correo = String(req.body?.correo || '').trim().toLowerCase();
+        if (!esCorreoValido(correo)) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: 'Ingrese un correo electrónico válido.'
+            });
+        }
 
         const tokenRecuperacion = crypto.randomBytes(20).toString("hex");
         const fechaExpira = new Date(Date.now() + 3600000);
@@ -460,7 +547,7 @@ export const solicitarRecuperacion = async (req, res) => {
 
         if (!respuestaBrevo.ok) {
             const errorData = await respuestaBrevo.json();
-            console.error('❌ Error de Brevo:', errorData);
+            
 
             return res.status(500).json({
                 estado: 0,
@@ -470,7 +557,7 @@ export const solicitarRecuperacion = async (req, res) => {
 
         const data = await respuestaBrevo.json();
 
-        console.log('📨 Correo enviado correctamente. ID:', data.messageId);
+        
 
         return res.status(200).json({
             estado: 1,
@@ -478,7 +565,7 @@ export const solicitarRecuperacion = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error interno:', error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -492,7 +579,18 @@ export const solicitarRecuperacion = async (req, res) => {
 // ==========================================
 export const restablecerPassword = async (req, res) => {
     try {
-        const { token, nuevaPassword } = req.body;
+        const token = String(req.body?.token || '');
+        const nuevaPassword = req.body?.nuevaPassword;
+
+        if (!/^[a-f0-9]{40}$/i.test(token) ||
+            typeof nuevaPassword !== 'string' ||
+            !passwordValida(nuevaPassword)) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: 'El enlace o la nueva contraseña no son válidos.'
+            });
+        }
+
         const ahora = new Date();
 
         const [usuarios] = await conmysql.query(
@@ -535,7 +633,7 @@ export const restablecerPassword = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
+        
 
         res.status(500).json({
             estado: 0,
@@ -551,7 +649,7 @@ export const obtenerPerfil = async (req, res) => {
     try {
         const idUsuario = Number(req.params.id_usuario);
 
-        if (!idUsuario) {
+        if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: "Usuario no válido."
@@ -579,7 +677,7 @@ export const obtenerPerfil = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error obtenerPerfil:", error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -615,6 +713,13 @@ export const actualizarPerfil = async (req, res) => {
             });
         }
 
+        if (nombre.length > 100 || apellido.length > 100 || !esCorreoValido(correo)) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Nombre, apellido o correo no válidos."
+            });
+        }
+
         if (!esNombreValidoBackend(nombre)) {
             return res.status(400).json({
                 estado: 0,
@@ -629,7 +734,7 @@ export const actualizarPerfil = async (req, res) => {
             });
         }
 
-        if (!esCorreoValidoBackend(correo)) {
+        if (!esCorreoValido(correo)) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: "El correo electrónico no es válido. Use un proveedor reconocido (Gmail, Outlook, Hotmail, etc.)."
@@ -691,7 +796,7 @@ export const actualizarPerfil = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error actualizarPerfil:", error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -715,17 +820,19 @@ export const cambiarPassword = async (req, res) => {
             });
         }
 
-        if (!passwordActual || !nuevaPassword) {
+        if (typeof passwordActual !== 'string' || !passwordActual ||
+            typeof nuevaPassword !== 'string' || !nuevaPassword ||
+            Buffer.byteLength(passwordActual, 'utf8') > 72) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: 'La contraseña actual y la nueva contraseña son obligatorias.'
             });
         }
 
-        if (nuevaPassword.length < 8) {
+        if (!passwordValida(nuevaPassword)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: 'La nueva contraseña debe tener al menos 8 caracteres.'
+                mensaje: 'La contraseña debe tener entre 8 y 72 bytes e incluir mayúscula, minúscula, número y carácter especial.'
             });
         }
 
@@ -789,7 +896,7 @@ export const cambiarPassword = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error cambiarPassword:', error);
+        
 
         return res.status(500).json({
             estado: 0,
@@ -805,7 +912,7 @@ export const validarTokenRecuperacion = async (req, res) => {
     try {
         const { token } = req.params;
 
-        if (!token) {
+        if (!/^[a-f0-9]{40}$/i.test(String(token || ''))) {
             return res.status(400).json({
                 estado: 0,
                 valido: false,
@@ -838,7 +945,7 @@ export const validarTokenRecuperacion = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error validarTokenRecuperacion:", error);
+        
 
         return res.status(500).json({
             estado: 0,
