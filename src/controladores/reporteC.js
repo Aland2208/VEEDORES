@@ -1,5 +1,6 @@
 import { conmysql } from "../db.js";
 import PDFDocument from "pdfkit";
+import crypto from "node:crypto";
 
 // ======================================================
 // OBTENER REPORTE DE CAPTURAS DEL USUARIO
@@ -746,6 +747,8 @@ export const getReportesPendientesHoy = async (req, res) => {
                 rep.titulo,
                 rep.archivo_pdf,
                 rep.archivo_csv,
+                rep.estado_revision,
+                rep.motivo_rechazo,
                 DATE_FORMAT(
                     rep.fecha_generacion,
                     '%Y-%m-%d'
@@ -866,6 +869,10 @@ export const getReportesPendientesHoy = async (req, res) => {
                 rep.id_usuario = ?
 
                 AND rep.id_tipo_reporte IS NULL
+                AND (
+                    rep.estado_revision IS NULL
+                    OR rep.estado_revision = 'RECHAZADO'
+                )
 
                 AND c.estado = 1
 
@@ -1067,6 +1074,8 @@ export const getReportesPendientesAnteriores = async (req, res) => {
                 rep.titulo,
                 rep.archivo_pdf,
                 rep.archivo_csv,
+                rep.estado_revision,
+                rep.motivo_rechazo,
                 DATE_FORMAT(rep.fecha_generacion, '%Y-%m-%d') AS fecha_reporte,
                 DATE_FORMAT(rep.fecha_generacion, '%H:%i:%s') AS hora_reporte,
                 DATE_FORMAT(rep.fecha_generacion, '%Y-%m-%d %H:%i:%s') AS fecha_generacion,
@@ -1094,6 +1103,10 @@ export const getReportesPendientesAnteriores = async (req, res) => {
             INNER JOIN roles r ON u.id_rol = r.id_rol
             WHERE rep.id_usuario = ?
               AND rep.id_tipo_reporte IS NULL
+              AND (
+                  rep.estado_revision IS NULL
+                  OR rep.estado_revision = 'RECHAZADO'
+              )
               AND c.estado = 1
               AND rep.fecha_generacion >= ?
               AND rep.fecha_generacion < DATE_ADD(?, INTERVAL 1 DAY)
@@ -1315,6 +1328,10 @@ const obtenerDatosReportesEspecie = async (
                 AND d.id_especie = ?
 
                 AND rep.id_tipo_reporte IS NULL
+                AND (
+                    rep.estado_revision IS NULL
+                    OR rep.estado_revision = 'RECHAZADO'
+                )
 
                 AND c.estado = 1
 
@@ -1339,7 +1356,8 @@ const obtenerDatosReportesEspecie = async (
 
     if (
         reportes.length !== idsUnicos.length ||
-        new Set(reportes.map(reporte => reporte.fecha_reporte)).size !== 1
+        new Set(reportes.map(reporte => reporte.fecha_reporte)).size !== 1 ||
+        new Set(reportes.map(reporte => reporte.fecha_captura)).size !== 1
     ) {
 
         const error =
@@ -3277,7 +3295,13 @@ export const enviarReporteEspecie = async (req, res) => {
         const [reportes] = await conexion.query(`
             SELECT rep.id_reporte, rep.id_captura, rep.id_usuario,
                    rep.id_tipo_reporte, rep.archivo_pdf, rep.archivo_csv,
-                   c.estado, d.id_especie, e.nombre_comun AS especie
+                   c.estado,
+                   DATE_FORMAT(c.fecha_hora, '%Y-%m-%d') AS fecha_captura,
+                   DATE_FORMAT(
+                       CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '-05:00'),
+                       '%Y-%m-%d'
+                   ) AS fecha_actual_ecuador,
+                   d.id_especie, e.nombre_comun AS especie
             FROM reportes rep
             INNER JOIN capturas c ON rep.id_captura = c.id_captura
             INNER JOIN detecciones d ON c.id_deteccion = d.id_deteccion
@@ -3314,6 +3338,14 @@ export const enviarReporteEspecie = async (req, res) => {
             });
         }
 
+        if (new Set(reportes.map(reporte => reporte.fecha_captura)).size !== 1) {
+            await conexion.rollback();
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Envía por separado las capturas que pertenecen a fechas distintas"
+            });
+        }
+
         // Validar archivos desde BD, no solamente desde Angular
         if (reportes.some(r => Number(r.archivo_pdf) !== 1)) {
             await conexion.rollback();
@@ -3331,16 +3363,28 @@ export const enviarReporteEspecie = async (req, res) => {
             });
         }
 
+        const fechaActualEcuador = reportes[0].fecha_actual_ecuador;
+        const esAtrasado = reportes[0].fecha_captura < fechaActualEcuador;
+        const idLoteEnvio = crypto.randomUUID();
+        const estadoRevision = esAtrasado ? "PENDIENTE" : null;
+
         // Finalizar todos los registros del grupo
         const [resultado] = await conexion.query(`
             UPDATE reportes
-            SET id_tipo_reporte = ?, titulo = ?
+            SET id_tipo_reporte = ?,
+                titulo = ?,
+                id_lote_envio = ?,
+                estado_revision = ?,
+                fecha_envio = UTC_TIMESTAMP(),
+                fecha_revision = NULL,
+                id_administrador_revision = NULL,
+                motivo_rechazo = NULL
             WHERE id_usuario = ?
               AND id_tipo_reporte IS NULL
               AND archivo_pdf = 1
               AND archivo_csv = 1
               AND id_reporte IN (${placeholders})
-        `, [idTipo, tituloLimpio, idUsuario, ...ids]);
+        `, [idTipo, tituloLimpio, idLoteEnvio, estadoRevision, idUsuario, ...ids]);
 
         if (resultado.affectedRows !== ids.length) {
             await conexion.rollback();
@@ -3360,8 +3404,12 @@ export const enviarReporteEspecie = async (req, res) => {
 
         return res.status(200).json({
             estado: 1,
-            mensaje: "Reporte enviado correctamente",
+            mensaje: esAtrasado
+                ? "Reporte atrasado enviado y pendiente de aprobación del administrador"
+                : "Reporte enviado correctamente",
             data: {
+                id_lote_envio: idLoteEnvio,
+                requiere_aprobacion: esAtrasado,
                 id_especie: idEspecie,
                 especie: reportes[0].especie,
                 id_tipo_reporte: idTipo,
@@ -3755,6 +3803,145 @@ export const getDetalleReporte = async (req, res) => {
 // ======================================================
 // REPORTES DEL DÍA - ADMINISTRADOR
 // ======================================================
+const revisarLoteReporte = async (req, res, aprobado) => {
+    let conexion;
+
+    try {
+        const idAdministrador = Number(req.params.id_administrador);
+        const idLoteEnvio = String(req.params.id_lote_envio || '');
+        const motivo = String(req.body?.motivo || '').trim();
+
+        if (!Number.isInteger(idAdministrador) || idAdministrador <= 0) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Administrador no válido"
+            });
+        }
+
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idLoteEnvio)) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "El lote de reporte no es válido"
+            });
+        }
+
+        if (!aprobado && (motivo.length < 5 || motivo.length > 500)) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "El motivo de rechazo debe tener entre 5 y 500 caracteres"
+            });
+        }
+
+        conexion = await conmysql.getConnection();
+        await conexion.beginTransaction();
+
+        const [reportesLote] = await conexion.query(`
+            SELECT
+                rep.id_reporte,
+                rep.id_usuario
+            FROM reportes rep
+            INNER JOIN administrador a
+                ON a.id_usuario = rep.id_usuario
+               AND a.id_administrador = ?
+               AND rep.fecha_generacion >= a.fecha_inicio
+               AND (
+                   a.fecha_fin IS NULL
+                   OR rep.fecha_generacion < a.fecha_fin
+               )
+            INNER JOIN usuarios u
+                ON u.id_usuario = rep.id_usuario
+               AND u.id_rol = 2
+            WHERE rep.id_lote_envio = ?
+              AND rep.estado_revision = 'PENDIENTE'
+            FOR UPDATE
+        `, [idAdministrador, idLoteEnvio]);
+
+        const usuariosLote = new Set(
+            reportesLote.map(reporte => Number(reporte.id_usuario))
+        );
+        if (!reportesLote.length || usuariosLote.size !== 1) {
+            await conexion.rollback();
+            return res.status(404).json({
+                estado: 0,
+                mensaje: "El reporte pendiente no existe o no pertenece a un observador activo"
+            });
+        }
+
+        const nuevoEstado = aprobado ? 'APROBADO' : 'RECHAZADO';
+        const valores = aprobado
+            ? [nuevoEstado, idAdministrador, idLoteEnvio]
+            : [nuevoEstado, idAdministrador, motivo, idLoteEnvio];
+        const consulta = aprobado
+            ? `
+                UPDATE reportes
+                SET estado_revision = ?,
+                    fecha_revision = UTC_TIMESTAMP(),
+                    id_administrador_revision = ?,
+                    motivo_rechazo = NULL
+                WHERE id_lote_envio = ?
+                  AND estado_revision = 'PENDIENTE'
+            `
+            : `
+                UPDATE reportes
+                SET estado_revision = ?,
+                    fecha_revision = UTC_TIMESTAMP(),
+                    id_administrador_revision = ?,
+                    motivo_rechazo = ?,
+                    id_tipo_reporte = NULL,
+                    titulo = NULL,
+                    archivo_pdf = 0,
+                    archivo_csv = 0
+                WHERE id_lote_envio = ?
+                  AND estado_revision = 'PENDIENTE'
+            `;
+
+        const [resultado] = await conexion.query(consulta, valores);
+        if (Number(resultado.affectedRows) !== reportesLote.length) {
+            await conexion.rollback();
+            return res.status(409).json({
+                estado: 0,
+                mensaje: "El estado del reporte cambió. Actualiza la lista e inténtalo nuevamente."
+            });
+        }
+
+        await conexion.commit();
+        return res.status(200).json({
+            estado: 1,
+            mensaje: aprobado
+                ? "Reporte aprobado correctamente."
+                : "Reporte rechazado. El observador puede corregirlo y enviarlo nuevamente.",
+            data: {
+                id_lote_envio: idLoteEnvio,
+                estado_revision: nuevoEstado,
+                total_reportes: reportesLote.length
+            }
+        });
+    } catch (error) {
+        if (conexion) {
+            try {
+                await conexion.rollback();
+            } catch {
+                // Keep the original request failure as the response cause.
+            }
+        }
+
+        return res.status(500).json({
+            estado: 0,
+            mensaje: aprobado
+                ? "No se pudo aprobar el reporte."
+                : "No se pudo rechazar el reporte."
+        });
+    } finally {
+        if (conexion) conexion.release();
+    }
+};
+
+export const aprobarLoteReporte = (req, res) =>
+    revisarLoteReporte(req, res, true);
+
+export const rechazarLoteReporte = (req, res) =>
+    revisarLoteReporte(req, res, false);
+
 export const getReportesAdministradorHoy = async (req, res) => {
     try {
         const idAdministrador = Number(req.params.id_administrador);
@@ -3801,6 +3988,11 @@ export const getReportesAdministradorHoy = async (req, res) => {
     rep.titulo,
     rep.archivo_pdf,
     rep.archivo_csv,
+    rep.id_lote_envio,
+    rep.estado_revision,
+    rep.fecha_envio,
+    rep.fecha_revision,
+    rep.motivo_rechazo,
 
     DATE_FORMAT(rep.fecha_generacion,'%Y-%m-%d') AS fecha_reporte,
     DATE_FORMAT(rep.fecha_generacion,'%H:%i:%s') AS hora_reporte,
@@ -3816,6 +4008,7 @@ export const getReportesAdministradorHoy = async (req, res) => {
     c.peso,
     DATE_FORMAT(c.fecha_hora,'%Y-%m-%d') AS fecha_captura,
     DATE_FORMAT(c.fecha_hora,'%H:%i:%s') AS hora_captura,
+    (DATE(c.fecha_hora) < ?) AS es_atrasado,
 
     d.id_deteccion,
     d.porcentaje,
@@ -3863,14 +4056,27 @@ export const getReportesAdministradorHoy = async (req, res) => {
      OR rep.fecha_generacion<a.fecha_fin
     )
 
-    AND rep.fecha_generacion>=?
-    AND rep.fecha_generacion<DATE_ADD(?,INTERVAL 1 DAY)
+    AND (
+     (
+      rep.fecha_generacion>=?
+      AND rep.fecha_generacion<DATE_ADD(?,INTERVAL 1 DAY)
+     )
+     OR rep.estado_revision='PENDIENTE'
+     OR DATE(CONVERT_TZ(rep.fecha_revision,'+00:00','-05:00'))=?
+    )
 
    ORDER BY rep.fecha_generacion DESC
-  `, [idAdministrador, fechaEcuador, fechaEcuador]);
+  `, [fechaEcuador, idAdministrador, fechaEcuador, fechaEcuador, fechaEcuador]);
 
-        const completos = reportes.filter(r => r.estado_reporte === "Completo").length;
-        const incompletos = reportes.filter(r => r.estado_reporte === "Incompleto").length;
+        const reportesContabilizados = reportes.filter(
+            reporte => reporte.estado_revision !== "PENDIENTE"
+        );
+        const completos = reportesContabilizados.filter(
+            reporte => reporte.estado_reporte === "Completo"
+        ).length;
+        const incompletos = reportesContabilizados.filter(
+            reporte => reporte.estado_reporte === "Incompleto"
+        ).length;
 
         return res.status(200).json({
             estado: 1,
@@ -3878,7 +4084,7 @@ export const getReportesAdministradorHoy = async (req, res) => {
             fecha_ecuador: fechaEcuador,
             administrador: administradores[0],
             resumen: {
-                total: reportes.length,
+                total: reportesContabilizados.length,
                 completos,
                 incompletos
             },

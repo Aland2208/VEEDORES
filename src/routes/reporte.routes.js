@@ -4,7 +4,8 @@ import {
     getReporteCapturas, getReportePorFechas, getResumenEspecies, getTiposReporte, getReportesPendientesHoy,
     getReportesPendientesAnteriores,
     generarPDFEspecie, generarCSVEspecie, enviarReporteEspecie, getHistorialReportes, getEspeciesFiltro, getDetalleReporte,
-    getReportesAdministradorHoy, editarTituloReporteAdmin, editarReporteAdmin, generarPDFReporteAdmin, generarCSVReporteAdmin
+    getReportesAdministradorHoy, aprobarLoteReporte, rechazarLoteReporte,
+    editarTituloReporteAdmin, editarReporteAdmin, generarPDFReporteAdmin, generarCSVReporteAdmin
 } from "../controladores/reporteC.js";
 import {
     requireOwnAdminRequest,
@@ -23,6 +24,18 @@ router.get(
     verifyToken,
     requireOwnAdminRequest,
     getReportesAdministradorHoy
+);
+router.patch(
+    "/admin/:id_administrador/lote/:id_lote_envio/aprobar",
+    verifyToken,
+    requireOwnAdminRequest,
+    aprobarLoteReporte
+);
+router.patch(
+    "/admin/:id_administrador/lote/:id_lote_envio/rechazar",
+    verifyToken,
+    requireOwnAdminRequest,
+    rechazarLoteReporte
 );
 router.get(
     "/pendientes/hoy/:id_usuario",
