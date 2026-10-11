@@ -65,7 +65,10 @@ test('sends the verification link to the requested email address', async () => {
             requestBody.htmlContent,
             /https:\/\/example\.com\/verificar-correo\?token=verification-token/
         );
-        assert.match(requestBody.htmlContent, /vence en 15 minutos/);
+        assert.match(requestBody.htmlContent, /Completa tu registro/);
+        assert.match(requestBody.htmlContent, /VIGÍA/);
+        assert.match(requestBody.htmlContent, /vence en[\s\S]*15 minutos/);
+        assert.match(requestBody.htmlContent, /No se creará una cuenta mientras no confirmes el correo/);
     } finally {
         globalThis.fetch = previousFetch;
         if (previousApiKey === undefined) {

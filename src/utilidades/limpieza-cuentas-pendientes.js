@@ -9,6 +9,13 @@ export async function limpiarCuentasPendientesVencidas() {
     try {
         await conexion.beginTransaction();
 
+        const [solicitudesEliminadas] = await conexion.query(`
+            DELETE FROM solicitudes_registro
+            WHERE expira <= NOW()
+            ORDER BY expira ASC
+            LIMIT ${TAMANO_LOTE}
+        `);
+
         const [usuarios] = await conexion.query(`
             SELECT u.id_usuario
             FROM usuarios u
@@ -39,7 +46,7 @@ export async function limpiarCuentasPendientesVencidas() {
 
         if (usuarios.length === 0) {
             await conexion.commit();
-            return 0;
+            return Number(solicitudesEliminadas.affectedRows);
         }
 
         const ids = usuarios.map(usuario => Number(usuario.id_usuario));
@@ -59,7 +66,8 @@ export async function limpiarCuentasPendientesVencidas() {
         `, ids);
 
         await conexion.commit();
-        return Number(resultado.affectedRows);
+        return Number(solicitudesEliminadas.affectedRows) +
+            Number(resultado.affectedRows);
     } catch (error) {
         try {
             await conexion.rollback();

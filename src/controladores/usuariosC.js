@@ -1,6 +1,7 @@
 import { conmysql } from '../db.js';
 import bcrypt from 'bcrypt';
 import { esCorreoValido, passwordValida } from '../utilidades/correo.js';
+import { esNombreValido } from '../utilidades/nombre.js';
 import {
     crearTokenVerificacionCorreo,
     enviarCorreoVerificacion,
@@ -30,11 +31,37 @@ export const getObservadores=async(req,res)=>{
               AND admin.estado=1
             ORDER BY u.nombre ASC,u.apellido ASC
         `,[idAdministrador]);
+        const [solicitudesPendientes]=await conmysql.query(`
+            SELECT
+                s.id_solicitud,
+                s.nombre,
+                s.apellido,
+                s.correo,
+                0 AS estado,
+                1 AS verificacion_pendiente,
+                s.fecha_creacion
+            FROM solicitudes_registro s
+            INNER JOIN usuarios admin
+                ON admin.id_usuario = s.id_administrador
+               AND admin.id_rol = 1
+               AND admin.estado = 1
+            WHERE s.id_administrador = ?
+              AND s.id_rol = 2
+              AND s.expira > NOW()
+            ORDER BY s.fecha_creacion DESC
+        `,[idAdministrador]);
 
         return res.status(200).json({
             estado:1,
             mensaje:'Observadores obtenidos correctamente.',
-            data:usuarios
+            data:[
+                ...usuarios,
+                ...solicitudesPendientes.map(solicitud=>({
+                    ...solicitud,
+                    id_usuario:null,
+                    verificacion_pendiente:1
+                }))
+            ]
         });
     }catch(error){
         
@@ -71,10 +98,7 @@ export const crearObservador=async(req,res)=>{
             });
         }
 
-        const patronNombre=/^[\p{L}]+(?:[ '-][\p{L}]+)*$/u;
-        if(nombre.length<2||apellido.length<2||
-           nombre.length>30||apellido.length>30||
-           !patronNombre.test(nombre)||!patronNombre.test(apellido)||
+        if(!esNombreValido(nombre)||!esNombreValido(apellido)||
            !esCorreoValido(correo)){
             return res.status(400).json({
                 estado:0,
@@ -132,43 +156,43 @@ export const crearObservador=async(req,res)=>{
             });
         }
 
-        const [resultado]=await conexion.query(`
-            INSERT INTO usuarios(
-                id_rol,
+        await conexion.query(`
+            DELETE FROM solicitudes_registro
+            WHERE correo = ?
+              AND expira <= NOW()
+        `,[correo]);
+
+        const [solicitudExistente]=await conexion.query(`
+            SELECT id_solicitud
+            FROM solicitudes_registro
+            WHERE correo = ?
+              AND expira > NOW()
+            LIMIT 1
+            FOR UPDATE
+        `,[correo]);
+
+        if(solicitudExistente.length>0){
+            await conexion.rollback();
+            return res.status(409).json({
+                estado:0,
+                mensaje:'Ya hay una solicitud pendiente para este correo. Revisa tu bandeja de entrada.'
+            });
+        }
+
+        await conexion.query(`
+            INSERT INTO solicitudes_registro(
                 nombre,
                 apellido,
                 correo,
                 password_hash,
-                estado,
-                token_verificacion_correo,
-                verificacion_correo_expira,
-                fecha_creacion
-            )
-            VALUES(
-                2,
-                ?,
-                ?,
-                ?,
-                ?,
-                0,
-                ?,
-                ?,
-                DATE_SUB(UTC_TIMESTAMP(),INTERVAL 5 HOUR)
-            )
-        `,[nombre,apellido,correo,passwordHash,tokenHash,expira]);
-
-        await conexion.query(`
-            INSERT INTO administrador(
+                id_rol,
                 id_administrador,
-                id_usuario,
-                fecha_inicio
+                token_hash,
+                expira
             )
-            VALUES(
-                ?,
-                ?,
-                DATE_SUB(UTC_TIMESTAMP(),INTERVAL 5 HOUR)
-            )
-        `,[idAdministrador,resultado.insertId]);
+            VALUES(?, ?, ?, ?, 2, ?, ?, ?)
+        `,[nombre,apellido,correo,passwordHash,tokenHash,expira]);
+        
 
         try{
             await enviarCorreoVerificacion(correo,token);
@@ -184,9 +208,8 @@ export const crearObservador=async(req,res)=>{
 
         return res.status(201).json({
             estado:1,
-            mensaje:'Observador creado. Se envió un enlace de verificación; la cuenta se activará al confirmar el correo.',
+            mensaje:'Solicitud enviada. El observador se creará cuando confirme su correo.',
             data:{
-                id_usuario:resultado.insertId,
                 nombre,
                 apellido,
                 correo,
@@ -245,10 +268,7 @@ export const editarObservador=async(req,res)=>{
 
         const nombreLimpio=nombre.trim();
         const apellidoLimpio=apellido.trim();
-        const patronNombre=/^[\p{L}]+(?:[ '-][\p{L}]+)*$/u;
-        if(nombreLimpio.length<2||apellidoLimpio.length<2||
-           nombreLimpio.length>30||apellidoLimpio.length>30||
-           !patronNombre.test(nombreLimpio)||!patronNombre.test(apellidoLimpio)){
+        if(!esNombreValido(nombreLimpio)||!esNombreValido(apellidoLimpio)){
             return res.status(400).json({
                 estado:0,
                 mensaje:'El nombre o el apellido no son válidos.'

@@ -7,6 +7,7 @@ import {
     passwordValida,
     PASSWORD_MAX_BYTES
 } from "../utilidades/correo.js";
+import { esNombreValido } from "../utilidades/nombre.js";
 import {
     crearTokenVerificacionCorreo,
     enviarCorreoVerificacion,
@@ -19,62 +20,6 @@ import {
 const MAX_INTENTOS = 3;
 const TIEMPO_BLOQUEO = 15 * 60 * 1000;
 const intentosLogin = new Map();
-
-// ==========================================
-// LISTA NEGRA Y DETECTOR DE TEXTO INCOHERENTE
-// ==========================================
-const palabrasProhibidas = [
-    'mama', 'tanga', 'papa', 'culo', 'puta', 'puto', 'mierda', 'verga', 'pito',
-    'pendejo', 'pendeja', 'idiota', 'maricon', 'perra', 'perro', 'chucha', 'hdp',
-    'admin', 'administrador', 'root', 'test', 'prueba', 'usuario', 'null', 'undefined',
-    'anonimo', 'nobody', 'fake', 'bot', 'observador', 'veedor', 'tonto', 'bobo', 'loco'
-];
-
-const esNombreValidoBackend = (texto) => {
-    const limpio = String(texto || '').trim().replace(/\s+/g, ' ');
-
-    if (limpio.length < 2 || limpio.length > 30) return false;
-
-    const regexLetras = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+(?: [a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+)*$/;
-    if (!regexLetras.test(limpio)) return false;
-
-    const palabras = limpio.split(' ');
-    if (palabras.length > 2) return false;
-
-    for (const palabra of palabras) {
-        if (palabra.length < 2 || palabra.length > 14) return false;
-
-        const pLower = palabra.toLowerCase();
-        const pSinTildes = pLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-        if (palabrasProhibidas.includes(pSinTildes)) return false;
-        if (/([a-záéíóúñü])\1\1/i.test(pLower)) return false;
-
-        const vocales = pLower.match(/[aeiouáéíóúü]/g) || [];
-        if (vocales.length === 0) return false;
-
-        if (palabra.length >= 6) {
-            const porcentajeVocales = vocales.length / palabra.length;
-            if (porcentajeVocales < 0.25 || porcentajeVocales > 0.70) return false;
-        }
-
-        if (/[bcdfghjklmnñpqrstvwxyz]{3,}/i.test(pLower)) return false;
-        if (/[aeiouáéíóúü]{3,}/i.test(pLower)) return false;
-        if (/(jd|dj|jn|nj|dn|nd|ed|fn|nf|bf|fb|ubf|fub|bbu|ffu|qj|xj|zx|jk|kj|wq|qw|fg|gf|vb|bv|bp|pb)/i.test(pLower)) return false;
-
-        const conteoLetras = {};
-        for (const char of pLower) {
-            if (!'aeiouáéíóúü'.includes(char)) {
-                conteoLetras[char] = (conteoLetras[char] || 0) + 1;
-                if (conteoLetras[char] >= 3) return false;
-            }
-        }
-
-        if (/(.{2,4})\1/i.test(pLower) && palabra.length > 8) return false;
-    }
-
-    return true;
-};
 
 // ==========================================
 // VALIDACIÓN ESTRICTA DE CORREO (BACKEND)
@@ -101,7 +46,7 @@ export const registrarUsuario = async (req, res) => {
         }
 
         // 2. Validar que el nombre sea auténtico
-        if (!esNombreValidoBackend(nombre)) {
+        if (!esNombreValido(nombre)) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: "El nombre no es válido. Escriba un nombre real y formal."
@@ -109,7 +54,7 @@ export const registrarUsuario = async (req, res) => {
         }
 
         // 3. Validar que el apellido sea auténtico
-        if (!esNombreValidoBackend(apellido)) {
+        if (!esNombreValido(apellido)) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: "El apellido no es válido. Escriba un apellido real y formal."
@@ -159,13 +104,60 @@ export const registrarUsuario = async (req, res) => {
         conexion = await conmysql.getConnection();
         await conexion.beginTransaction();
 
-        await conexion.query(
-            `INSERT INTO usuarios
-                (nombre, apellido, correo, password_hash, id_rol, estado,
-                 token_verificacion_correo, verificacion_correo_expira)
-             VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
-            [nombreFormateado, apellidoFormateado, correo, hash, Number(id_rol), tokenHash, expira]
+        const [usuariosExistentes] = await conexion.query(
+            `SELECT id_usuario
+             FROM usuarios
+             WHERE correo=?
+             LIMIT 1
+             FOR UPDATE`,
+            [correo]
         );
+
+        if (usuariosExistentes.length > 0) {
+            await conexion.rollback();
+            return res.status(409).json({
+                estado: 0,
+                mensaje: "El correo ya está registrado."
+            });
+        }
+
+        await conexion.query(`
+            DELETE FROM solicitudes_registro
+            WHERE correo = ?
+              AND expira <= NOW()
+        `, [correo]);
+
+        const [solicitudesExistentes] = await conexion.query(`
+            SELECT id_solicitud
+            FROM solicitudes_registro
+            WHERE correo = ?
+              AND expira > NOW()
+            LIMIT 1
+            FOR UPDATE
+        `, [correo]);
+
+        if (solicitudesExistentes.length > 0) {
+            await conexion.rollback();
+            return res.status(409).json({
+                estado: 0,
+                mensaje: "Ya hay una solicitud pendiente para este correo. Revisa tu bandeja de entrada."
+            });
+        }
+
+        await conexion.query(`
+            INSERT INTO solicitudes_registro
+                (nombre, apellido, correo, password_hash, id_rol,
+                 id_administrador, token_hash, expira)
+            VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
+        `, [
+            nombreFormateado,
+            apellidoFormateado,
+            correo,
+            hash,
+            Number(id_rol),
+            tokenHash,
+            expira
+        ]);
 
         try {
             await enviarCorreoVerificacion(correo, token);
@@ -182,7 +174,7 @@ export const registrarUsuario = async (req, res) => {
 
         return res.status(201).json({
             estado: 1,
-            mensaje: "Cuenta creada. Revisa tu correo y confirma el enlace para activarla."
+            mensaje: "Solicitud recibida. La cuenta se creará cuando confirmes el correo."
         });
 
     } catch (error) {
@@ -206,6 +198,8 @@ export const registrarUsuario = async (req, res) => {
 };
 
 export const verificarCorreo = async (req, res) => {
+    let conexion;
+
     try {
         const token = String(req.body?.token || "");
         if (!/^[a-f0-9]{64}$/i.test(token)) {
@@ -216,34 +210,148 @@ export const verificarCorreo = async (req, res) => {
         }
 
         const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-        const [resultado] = await conmysql.query(
-            `UPDATE usuarios
-             SET estado=1,
-                 token_verificacion_correo=NULL,
-                 verificacion_correo_expira=NULL
-             WHERE token_verificacion_correo=?
-               AND verificacion_correo_expira>NOW()
-               AND estado=0`,
-            [tokenHash]
-        );
+        conexion = await conmysql.getConnection();
+        await conexion.beginTransaction();
 
-        if (resultado.affectedRows !== 1) {
+        const [solicitudes] = await conexion.query(`
+            SELECT
+                id_solicitud,
+                nombre,
+                apellido,
+                correo,
+                password_hash,
+                id_rol,
+                id_administrador
+            FROM solicitudes_registro
+            WHERE token_hash = ?
+              AND expira > NOW()
+            LIMIT 1
+            FOR UPDATE
+        `, [tokenHash]);
+
+        if (solicitudes.length !== 1) {
+            const [usuariosPendientes] = await conexion.query(`
+                SELECT id_usuario
+                FROM usuarios
+                WHERE token_verificacion_correo = ?
+                  AND estado = 0
+                  AND verificacion_correo_expira > NOW()
+                LIMIT 1
+                FOR UPDATE
+            `, [tokenHash]);
+
+            if (usuariosPendientes.length === 1) {
+                const [activacion] = await conexion.query(`
+                    UPDATE usuarios
+                    SET estado = 1,
+                        token_verificacion_correo = NULL,
+                        verificacion_correo_expira = NULL
+                    WHERE id_usuario = ?
+                      AND estado = 0
+                `, [usuariosPendientes[0].id_usuario]);
+
+                if (Number(activacion.affectedRows) === 1) {
+                    await conexion.commit();
+                    return res.status(200).json({
+                        estado: 1,
+                        mensaje: "Correo confirmado. Ya puedes iniciar sesión."
+                    });
+                }
+            }
+
+            await conexion.rollback();
             return res.status(400).json({
                 estado: 0,
                 mensaje: "El enlace de verificación no es válido o ya venció."
             });
         }
 
+        const solicitud = solicitudes[0];
+        const [usuariosExistentes] = await conexion.query(`
+            SELECT id_usuario
+            FROM usuarios
+            WHERE correo = ?
+            LIMIT 1
+            FOR UPDATE
+        `, [solicitud.correo]);
+
+        if (usuariosExistentes.length > 0) {
+            await conexion.query(
+                'DELETE FROM solicitudes_registro WHERE id_solicitud = ?',
+                [solicitud.id_solicitud]
+            );
+            await conexion.commit();
+            return res.status(409).json({
+                estado: 0,
+                mensaje: "Ya existe una cuenta con este correo. Inicia sesión o utiliza otro correo."
+            });
+        }
+
+        if (solicitud.id_administrador !== null) {
+            const [administradores] = await conexion.query(`
+                SELECT id_usuario
+                FROM usuarios
+                WHERE id_usuario = ?
+                  AND id_rol = 1
+                  AND estado = 1
+                LIMIT 1
+                FOR UPDATE
+            `, [solicitud.id_administrador]);
+
+            if (administradores.length !== 1) {
+                await conexion.rollback();
+                return res.status(409).json({
+                    estado: 0,
+                    mensaje: "La administración que solicitó la cuenta ya no está disponible. Contacta al administrador."
+                });
+            }
+        }
+
+        const [resultadoUsuario] = await conexion.query(`
+            INSERT INTO usuarios
+                (nombre, apellido, correo, password_hash, id_rol, estado, fecha_creacion)
+            VALUES (?, ?, ?, ?, ?, 1, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR))
+        `, [
+            solicitud.nombre,
+            solicitud.apellido,
+            solicitud.correo,
+            solicitud.password_hash,
+            solicitud.id_rol
+        ]);
+
+        if (Number(solicitud.id_rol) === 2 && solicitud.id_administrador !== null) {
+            await conexion.query(`
+                INSERT INTO administrador
+                    (id_administrador, id_usuario, fecha_inicio)
+                VALUES (?, ?, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR))
+            `, [solicitud.id_administrador, resultadoUsuario.insertId]);
+        }
+
+        await conexion.query(
+            'DELETE FROM solicitudes_registro WHERE id_solicitud = ?',
+            [solicitud.id_solicitud]
+        );
+        await conexion.commit();
+
         return res.status(200).json({
             estado: 1,
-            mensaje: "Correo verificado. Ya puedes iniciar sesión."
+            mensaje: "Correo confirmado y cuenta creada. Ya puedes iniciar sesión."
         });
     } catch (error) {
-        
+        if (conexion) {
+            try {
+                await conexion.rollback();
+            } catch {
+                // Preserve the original verification failure.
+            }
+        }
+
         return res.status(500).json({
             estado: 0,
             mensaje: "No se pudo verificar el correo. Intenta nuevamente."
         });
+    } finally {
+        if (conexion) conexion.release();
     }
 };
 
@@ -705,14 +813,14 @@ export const actualizarPerfil = async (req, res) => {
             });
         }
 
-        if (!esNombreValidoBackend(nombre)) {
+        if (!esNombreValido(nombre)) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: "El nombre no es válido. Escriba un nombre real y formal."
             });
         }
 
-        if (!esNombreValidoBackend(apellido)) {
+        if (!esNombreValido(apellido)) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: "El apellido no es válido. Escriba un apellido real y formal."
