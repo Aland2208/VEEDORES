@@ -14,6 +14,7 @@ import { CORS_ORIGINS } from './config.js';
 
 const app = express();
 
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' })); // la app trabajara con JSON limitado
 
 const corsOptions = {

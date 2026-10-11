@@ -7,7 +7,7 @@ import {
     servicioVerificacionCorreoConfigurado
 } from '../src/utilidades/verificacion-correo.js';
 
-test('creates a random verification token with a hashed storage value and 24-hour expiry', () => {
+test('creates a random verification token with a hashed storage value and 15-minute expiry', () => {
     const before = Date.now();
     const first = crearTokenVerificacionCorreo();
     const second = crearTokenVerificacionCorreo();
@@ -18,7 +18,7 @@ test('creates a random verification token with a hashed storage value and 24-hou
         first.tokenHash,
         crypto.createHash('sha256').update(first.token).digest('hex')
     );
-    assert.equal(first.expira.getTime() >= before + 24 * 60 * 60 * 1000, true);
+    assert.equal(first.expira.getTime() >= before + 15 * 60 * 1000, true);
 });
 
 test('requires both email and frontend configuration', () => {
@@ -65,6 +65,7 @@ test('sends the verification link to the requested email address', async () => {
             requestBody.htmlContent,
             /https:\/\/example\.com\/verificar-correo\?token=verification-token/
         );
+        assert.match(requestBody.htmlContent, /vence en 15 minutos/);
     } finally {
         globalThis.fetch = previousFetch;
         if (previousApiKey === undefined) {

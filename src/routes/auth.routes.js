@@ -14,11 +14,12 @@ import {
     requireOwnUserId,
     verifyToken
 } from "../middlewares/verifyToken.js";
+import { limitarSolicitudesRegistro } from "../middlewares/limitar-registro.js";
 import { conmysql } from "../db.js";
 
 const router = Router();
 
-router.post("/registro", registrarUsuario);
+router.post("/registro", limitarSolicitudesRegistro, registrarUsuario);
 router.post("/verificar-correo", verificarCorreo);
 router.post("/login", loginUsuario);
 router.post("/recuperar", solicitarRecuperacion);

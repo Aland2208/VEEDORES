@@ -1,9 +1,11 @@
 import crypto from 'crypto';
 
+const DURACION_TOKEN_VERIFICACION_MS = 15 * 60 * 1000;
+
 export function crearTokenVerificacionCorreo() {
     const token = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    const expira = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const expira = new Date(Date.now() + DURACION_TOKEN_VERIFICACION_MS);
 
     return { token, tokenHash, expira };
 }
@@ -36,7 +38,7 @@ export async function enviarCorreoVerificacion(correo, token) {
                     <h1>Confirma tu correo</h1>
                     <p>Para activar tu cuenta de VIGÍA, confirma que puedes recibir mensajes en esta dirección.</p>
                     <p><a href="${urlVerificacion}">Verificar correo electrónico</a></p>
-                    <p>Este enlace vence en 24 horas. Si no solicitaste esta cuenta, ignora este mensaje.</p>
+                    <p>Este enlace vence en 15 minutos. Si no solicitaste esta cuenta, ignora este mensaje.</p>
                 </div>`
         })
     });
