@@ -1,6 +1,11 @@
 import { conmysql } from '../db.js';
 import bcrypt from 'bcrypt';
 import { esCorreoValido, passwordValida } from '../utilidades/correo.js';
+import {
+    crearTokenVerificacionCorreo,
+    enviarCorreoVerificacion,
+    servicioVerificacionCorreoConfigurado
+} from '../utilidades/verificacion-correo.js';
 
 /* LISTAR OBSERVADORES */
 export const getObservadores=async(req,res)=>{
@@ -13,6 +18,7 @@ export const getObservadores=async(req,res)=>{
                 u.apellido,
                 u.correo,
                 u.estado,
+                (u.token_verificacion_correo IS NOT NULL) AS verificacion_pendiente,
                 u.fecha_creacion
             FROM administrador a
             INNER JOIN usuarios u ON u.id_usuario=a.id_usuario
@@ -67,7 +73,7 @@ export const crearObservador=async(req,res)=>{
 
         const patronNombre=/^[\p{L}]+(?:[ '-][\p{L}]+)*$/u;
         if(nombre.length<2||apellido.length<2||
-           nombre.length>100||apellido.length>100||
+           nombre.length>30||apellido.length>30||
            !patronNombre.test(nombre)||!patronNombre.test(apellido)||
            !esCorreoValido(correo)){
             return res.status(400).json({
@@ -79,11 +85,19 @@ export const crearObservador=async(req,res)=>{
         if(typeof password!=='string'||!passwordValida(password)){
             return res.status(400).json({
                 estado:0,
-                mensaje:'La contraseña debe tener entre 8 y 72 bytes e incluir mayúscula, minúscula, número y carácter especial.'
+                mensaje:'La contraseña no cumple los requisitos de seguridad.'
+            });
+        }
+
+        if(!servicioVerificacionCorreoConfigurado()){
+            return res.status(503).json({
+                estado:0,
+                mensaje:'No se puede enviar el correo de verificación en este momento.'
             });
         }
 
         const passwordHash=await bcrypt.hash(password,10);
+        const {token,tokenHash,expira}=crearTokenVerificacionCorreo();
         conexion=await conmysql.getConnection();
         await conexion.beginTransaction();
 
@@ -126,6 +140,8 @@ export const crearObservador=async(req,res)=>{
                 correo,
                 password_hash,
                 estado,
+                token_verificacion_correo,
+                verificacion_correo_expira,
                 fecha_creacion
             )
             VALUES(
@@ -134,10 +150,12 @@ export const crearObservador=async(req,res)=>{
                 ?,
                 ?,
                 ?,
-                1,
+                0,
+                ?,
+                ?,
                 DATE_SUB(UTC_TIMESTAMP(),INTERVAL 5 HOUR)
             )
-        `,[nombre,apellido,correo,passwordHash]);
+        `,[nombre,apellido,correo,passwordHash,tokenHash,expira]);
 
         await conexion.query(`
             INSERT INTO administrador(
@@ -152,17 +170,28 @@ export const crearObservador=async(req,res)=>{
             )
         `,[idAdministrador,resultado.insertId]);
 
+        try{
+            await enviarCorreoVerificacion(correo,token);
+        }catch(error){
+            await conexion.rollback();
+            return res.status(502).json({
+                estado:0,
+                mensaje:'No se pudo enviar el correo de verificación. Intenta nuevamente.'
+            });
+        }
+
         await conexion.commit();
 
         return res.status(201).json({
             estado:1,
-            mensaje:'Observador creado correctamente.',
+            mensaje:'Observador creado. Se envió un enlace de verificación; la cuenta se activará al confirmar el correo.',
             data:{
                 id_usuario:resultado.insertId,
                 nombre,
                 apellido,
                 correo,
-                estado:1
+                estado:0,
+                verificacion_pendiente:true
             }
         });
     }catch(error){
@@ -218,7 +247,7 @@ export const editarObservador=async(req,res)=>{
         const apellidoLimpio=apellido.trim();
         const patronNombre=/^[\p{L}]+(?:[ '-][\p{L}]+)*$/u;
         if(nombreLimpio.length<2||apellidoLimpio.length<2||
-           nombreLimpio.length>100||apellidoLimpio.length>100||
+           nombreLimpio.length>30||apellidoLimpio.length>30||
            !patronNombre.test(nombreLimpio)||!patronNombre.test(apellidoLimpio)){
             return res.status(400).json({
                 estado:0,
@@ -296,7 +325,7 @@ export const cambiarEstadoObservador=async(req,res)=>{
         }
 
         const [usuario]=await conmysql.query(`
-            SELECT u.id_usuario,u.estado
+            SELECT u.id_usuario,u.estado,u.token_verificacion_correo
             FROM usuarios u
             INNER JOIN administrador a ON a.id_usuario=u.id_usuario
             INNER JOIN usuarios admin ON admin.id_usuario=a.id_administrador
@@ -313,6 +342,13 @@ export const cambiarEstadoObservador=async(req,res)=>{
             return res.status(404).json({
                 estado:0,
                 mensaje:'El observador no existe.'
+            });
+        }
+
+        if(usuario[0].token_verificacion_correo!==null){
+            return res.status(409).json({
+                estado:0,
+                mensaje:'El observador debe verificar su correo antes de activar o desactivar la cuenta.'
             });
         }
 

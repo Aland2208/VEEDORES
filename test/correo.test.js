@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { esCorreoValido, passwordValida } from '../src/utilidades/correo.js';
+import {
+    esCorreoValido,
+    passwordValida,
+    PASSWORD_MAX_BYTES
+} from '../src/utilidades/correo.js';
 
 test('accepts valid addresses on public and custom domains', () => {
     assert.equal(esCorreoValido('persona.apellido+registro@gmail.com'), true);
@@ -24,4 +28,7 @@ test('enforces the password policy and bcrypt byte limit', () => {
     assert.equal(passwordValida('cort1!'), false);
     assert.equal(passwordValida('ClaveSegura1!' + 'a'.repeat(60)), false);
     assert.equal(passwordValida('ClaveSegura1!' + 'ñ'.repeat(30)), false);
+    assert.equal(Buffer.byteLength('ClaveSegura1!' + 'a'.repeat(59), 'utf8'), PASSWORD_MAX_BYTES);
+    assert.equal(passwordValida('ClaveSegura1!' + 'a'.repeat(59)), true);
+    assert.equal(passwordValida('ClaveSegura1!' + 'a'.repeat(60)), false);
 });

@@ -5,7 +5,9 @@ import { JWT_SECRET } from '../src/config.js';
 import {
     requireAdmin,
     requireOwnAdminId,
+    requireOwnVeedorId,
     requireOwnUserId,
+    requireDeviceKey,
     verifyToken
 } from '../src/middlewares/verifyToken.js';
 
@@ -86,14 +88,38 @@ test('restricts veedor dashboards to the authenticated user', () => {
     const response = createResponse();
     let authorized = false;
 
-    requireOwnUserId(request, response, () => {
+    requireOwnVeedorId(request, response, () => {
         authorized = true;
     });
     assert.equal(authorized, true);
 
     request.params.id_usuario = '22';
-    requireOwnUserId(request, response, () => {
+    requireOwnVeedorId(request, response, () => {
         assert.fail('a user cannot query another user dashboard');
     });
     assert.equal(response.statusCode, 403);
+});
+
+test('requires a configured device key and rejects invalid keys', () => {
+    const previousKey = process.env.DEVICE_API_KEY;
+    process.env.DEVICE_API_KEY = 'test-device-key';
+    const response = createResponse();
+
+    requireDeviceKey({ get: () => 'wrong-key' }, response, () => {
+        assert.fail('invalid device keys must be rejected');
+    });
+    assert.equal(response.statusCode, 401);
+
+    const authorizedResponse = createResponse();
+    let authorized = false;
+    requireDeviceKey({ get: () => 'test-device-key' }, authorizedResponse, () => {
+        authorized = true;
+    });
+    assert.equal(authorized, true);
+
+    if (previousKey === undefined) {
+        delete process.env.DEVICE_API_KEY;
+    } else {
+        process.env.DEVICE_API_KEY = previousKey;
+    }
 });

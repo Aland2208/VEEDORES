@@ -2,7 +2,16 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { conmysql } from "../db.js";
-import { esCorreoValido, passwordValida } from "../utilidades/correo.js";
+import {
+    esCorreoValido,
+    passwordValida,
+    PASSWORD_MAX_BYTES
+} from "../utilidades/correo.js";
+import {
+    crearTokenVerificacionCorreo,
+    enviarCorreoVerificacion,
+    servicioVerificacionCorreoConfigurado
+} from "../utilidades/verificacion-correo.js";
 
 // ==========================================
 // CONTROL DE INTENTOS DE LOGIN
@@ -118,7 +127,7 @@ export const registrarUsuario = async (req, res) => {
         if (!passwordValida(password)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "La contraseña debe tener entre 8 y 72 bytes e incluir mayúscula, minúscula, número y carácter especial."
+                mensaje: "La contraseña no cumple los requisitos de seguridad."
             });
         }
 
@@ -129,7 +138,7 @@ export const registrarUsuario = async (req, res) => {
             });
         }
 
-        if (!process.env.API_BREVO || !process.env.FRONTEND_URL) {
+        if (!servicioVerificacionCorreoConfigurado()) {
             
             return res.status(503).json({
                 estado: 0,
@@ -145,9 +154,7 @@ export const registrarUsuario = async (req, res) => {
         const apellidoFormateado = formatearPalabra(apellido);
         const salt = await bcrypt.genSalt(10);
         const hash = await bcrypt.hash(password, salt);
-        const token = crypto.randomBytes(32).toString("hex");
-        const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-        const expira = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const { token, tokenHash, expira } = crearTokenVerificacionCorreo();
 
         conexion = await conmysql.getConnection();
         await conexion.beginTransaction();
@@ -160,31 +167,9 @@ export const registrarUsuario = async (req, res) => {
             [nombreFormateado, apellidoFormateado, correo, hash, Number(id_rol), tokenHash, expira]
         );
 
-        const urlFrontend = process.env.FRONTEND_URL.replace(/\/+$/, "");
-        const urlVerificacion = `${urlFrontend}/verificar-correo?token=${token}`;
-        const respuestaCorreo = await fetch('https://api.brevo.com/v3/smtp/email', {
-            method: 'POST',
-            signal: AbortSignal.timeout(10000),
-            headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/json',
-                'api-key': process.env.API_BREVO
-            },
-            body: JSON.stringify({
-                sender: { name: 'VIGÍA', email: 'veedoresbu@gmail.com' },
-                to: [{ email: correo }],
-                subject: 'Confirma tu correo electrónico | VIGÍA',
-                htmlContent: `
-                    <div style="font-family:Arial,sans-serif;color:#071627;max-width:600px;margin:auto">
-                        <h1>Confirma tu correo</h1>
-                        <p>Para activar tu cuenta de VIGÍA, confirma que puedes recibir mensajes en esta dirección.</p>
-                        <p><a href="${urlVerificacion}">Verificar correo electrónico</a></p>
-                        <p>Este enlace vence en 24 horas. Si no solicitaste esta cuenta, ignora este mensaje.</p>
-                    </div>`
-            })
-        });
-
-        if (!respuestaCorreo.ok) {
+        try {
+            await enviarCorreoVerificacion(correo, token);
+        } catch (error) {
             await conexion.rollback();
             
             return res.status(502).json({
@@ -193,7 +178,6 @@ export const registrarUsuario = async (req, res) => {
             });
         }
 
-        await respuestaCorreo.text();
         await conexion.commit();
 
         return res.status(201).json({
@@ -274,7 +258,7 @@ export const loginUsuario = async (req, res) => {
         password = String(password || '');
 
         if (!correo || correo.length > 150 ||
-            Buffer.byteLength(password, 'utf8') > 72 || !password) {
+            Buffer.byteLength(password, 'utf8') > PASSWORD_MAX_BYTES || !password) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: 'Correo y contraseña son obligatorios.'
@@ -714,7 +698,7 @@ export const actualizarPerfil = async (req, res) => {
             });
         }
 
-        if (nombre.length > 100 || apellido.length > 100 || !esCorreoValido(correo)) {
+        if (nombre.length > 30 || apellido.length > 30 || !esCorreoValido(correo)) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: "Nombre, apellido o correo no válidos."
@@ -823,7 +807,7 @@ export const cambiarPassword = async (req, res) => {
 
         if (typeof passwordActual !== 'string' || !passwordActual ||
             typeof nuevaPassword !== 'string' || !nuevaPassword ||
-            Buffer.byteLength(passwordActual, 'utf8') > 72) {
+            Buffer.byteLength(passwordActual, 'utf8') > PASSWORD_MAX_BYTES) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: 'La contraseña actual y la nueva contraseña son obligatorias.'
@@ -833,7 +817,7 @@ export const cambiarPassword = async (req, res) => {
         if (!passwordValida(nuevaPassword)) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: 'La contraseña debe tener entre 8 y 72 bytes e incluir mayúscula, minúscula, número y carácter especial.'
+                mensaje: 'La contraseña no cumple los requisitos de seguridad.'
             });
         }
 

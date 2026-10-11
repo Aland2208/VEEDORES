@@ -1020,6 +1020,114 @@ export const getReportesPendientesHoy = async (req, res) => {
 };
 
 // ======================================================
+// OBTENER REPORTES PENDIENTES DE DÍAS ANTERIORES
+// ======================================================
+export const getReportesPendientesAnteriores = async (req, res) => {
+    try {
+        const idUsuario = Number(req.params.id_usuario);
+        const { fecha_inicio, fecha_fin } = req.query;
+        const fechaValida = valor => {
+            if (typeof valor !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+                return false;
+            }
+
+            const fecha = new Date(`${valor}T00:00:00.000Z`);
+            return !Number.isNaN(fecha.getTime()) &&
+                fecha.toISOString().slice(0, 10) === valor;
+        };
+
+        if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
+            return res.status(400).json({ estado: 0, mensaje: "Usuario no válido" });
+        }
+
+        if (!fechaValida(fecha_inicio) || !fechaValida(fecha_fin) || fecha_inicio > fecha_fin) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "Seleccione un rango de fechas válido"
+            });
+        }
+
+        const [usuarios] = await conmysql.query(`
+            SELECT u.id_usuario, u.nombre, u.apellido, u.correo, r.id_rol, r.nombre_rol
+            FROM usuarios u
+            INNER JOIN roles r ON u.id_rol = r.id_rol
+            WHERE u.id_usuario = ?
+            LIMIT 1
+        `, [idUsuario]);
+
+        if (!usuarios.length) {
+            return res.status(404).json({ estado: 0, mensaje: "Usuario no encontrado" });
+        }
+
+        const [reportes] = await conmysql.query(`
+            SELECT
+                rep.id_reporte,
+                rep.id_captura,
+                rep.id_tipo_reporte,
+                rep.titulo,
+                rep.archivo_pdf,
+                rep.archivo_csv,
+                DATE_FORMAT(rep.fecha_generacion, '%Y-%m-%d') AS fecha_reporte,
+                DATE_FORMAT(rep.fecha_generacion, '%H:%i:%s') AS hora_reporte,
+                DATE_FORMAT(rep.fecha_generacion, '%Y-%m-%d %H:%i:%s') AS fecha_generacion,
+                c.peso,
+                DATE_FORMAT(c.fecha_hora, '%Y-%m-%d') AS fecha_captura,
+                DATE_FORMAT(c.fecha_hora, '%H:%i:%s') AS hora_captura,
+                DATE_FORMAT(c.fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora_captura,
+                d.id_deteccion,
+                d.porcentaje,
+                d.imagen_url,
+                e.id_especie,
+                e.nombre_comun AS especie,
+                e.nombre_cientifico,
+                u.id_usuario,
+                u.nombre,
+                u.apellido,
+                CONCAT(u.nombre, ' ', u.apellido) AS nombre_completo,
+                r.id_rol,
+                r.nombre_rol
+            FROM reportes rep
+            INNER JOIN capturas c ON rep.id_captura = c.id_captura
+            INNER JOIN detecciones d ON c.id_deteccion = d.id_deteccion
+            INNER JOIN especies e ON d.id_especie = e.id_especie
+            INNER JOIN usuarios u ON rep.id_usuario = u.id_usuario
+            INNER JOIN roles r ON u.id_rol = r.id_rol
+            WHERE rep.id_usuario = ?
+              AND rep.id_tipo_reporte IS NULL
+              AND c.estado = 1
+              AND rep.fecha_generacion >= ?
+              AND rep.fecha_generacion < DATE_ADD(?, INTERVAL 1 DAY)
+              AND DATE(rep.fecha_generacion) < DATE(
+                  CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '-05:00')
+              )
+            ORDER BY rep.fecha_generacion DESC, e.nombre_comun ASC, c.fecha_hora ASC
+        `, [idUsuario, fecha_inicio, fecha_fin]);
+
+        const pesoTotal = reportes.reduce((total, item) => total + Number(item.peso || 0), 0);
+        const confianzaTotal = reportes.reduce((total, item) => total + Number(item.porcentaje || 0), 0);
+
+        return res.status(200).json({
+            estado: 1,
+            mensaje: "Reportes pendientes anteriores obtenidos correctamente",
+            usuario: usuarios[0],
+            resumen: {
+                total_registros: reportes.length,
+                peso_total: Number(pesoTotal.toFixed(2)),
+                confianza_promedio: reportes.length
+                    ? Number((confianzaTotal / reportes.length).toFixed(2))
+                    : 0
+            },
+            data: reportes
+        });
+    } catch (error) {
+        return res.status(500).json({
+            estado: 0,
+            mensaje: "Error al obtener los reportes pendientes anteriores"
+        });
+    }
+};
+
+// ======================================================
 // FUNCIONES AUXILIARES PARA GENERACIÓN DE ARCHIVOS
 // ======================================================
 
@@ -1059,7 +1167,7 @@ const validarDatosGeneracion = ({
     }
 
     if (String(titulo).trim().length > 150) {
-        return "El título no puede superar 150 caracteres";
+        return "El título no es válido";
     }
 
     return null;
@@ -1210,16 +1318,6 @@ const obtenerDatosReportesEspecie = async (
 
                 AND c.estado = 1
 
-                AND DATE(
-                    rep.fecha_generacion
-                ) = DATE(
-                    CONVERT_TZ(
-                        UTC_TIMESTAMP(),
-                        '+00:00',
-                        '-05:00'
-                    )
-                )
-
                 AND rep.id_reporte
                     IN (${placeholders})
 
@@ -1240,13 +1338,13 @@ const obtenerDatosReportesEspecie = async (
     // ----------------------------------------------
 
     if (
-        reportes.length !==
-        idsUnicos.length
+        reportes.length !== idsUnicos.length ||
+        new Set(reportes.map(reporte => reporte.fecha_reporte)).size !== 1
     ) {
 
         const error =
             new Error(
-                "Uno o más reportes no pertenecen al usuario, a la especie seleccionada, no corresponden al día de hoy o ya fueron enviados"
+                "Uno o más reportes no pertenecen al usuario, a la especie seleccionada, no corresponden a una misma fecha o ya fueron enviados"
             );
 
         error.status = 400;
@@ -3142,7 +3240,7 @@ export const enviarReporteEspecie = async (req, res) => {
             return res.status(400).json({ estado: 0, mensaje: "Ingrese un título para el reporte" });
 
         if (tituloLimpio.length > 150)
-            return res.status(400).json({ estado: 0, mensaje: "El título no puede superar 150 caracteres" });
+            return res.status(400).json({ estado: 0, mensaje: "El título no es válido" });
 
         if (!Array.isArray(ids_reportes) || ids_reportes.length === 0)
             return res.status(400).json({ estado: 0, mensaje: "No existen reportes para enviar" });
@@ -3317,7 +3415,7 @@ export const getHistorialReportes = async (req, res) => {
         if (String(busqueda || '').length > 150) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "La búsqueda no puede superar 150 caracteres."
+                mensaje: "La búsqueda no es válida."
             });
         }
 
@@ -3820,7 +3918,7 @@ export const editarTituloReporteAdmin = async (req, res) => {
 
         const tituloLimpio = String(titulo).trim();
         if (tituloLimpio.length > 150) {
-            return res.status(400).json({ estado: 0, mensaje: "El título no puede superar 150 caracteres" });
+            return res.status(400).json({ estado: 0, mensaje: "El título no es válido" });
         }
 
         // Validar administrador
@@ -3918,7 +4016,7 @@ export const editarReporteAdmin = async (req, res) => {
 
         const tituloLimpio = String(titulo).trim();
         if (tituloLimpio.length > 150) {
-            return res.status(400).json({ estado: 0, mensaje: "El título no puede superar 150 caracteres" });
+            return res.status(400).json({ estado: 0, mensaje: "El título no es válido" });
         }
 
         // Validar administrador

@@ -3,13 +3,13 @@ import { getDashboardVeedor, getDashboardAdministrador } from '../controladores/
 import {
     requireAdmin,
     requireOwnAdminId,
-    requireOwnUserId,
+    requireOwnVeedorId,
     verifyToken
 } from '../middlewares/verifyToken.js';
 
 const router = Router();
 
-router.get('/veedor/:id_usuario', verifyToken, requireOwnUserId, getDashboardVeedor);
+router.get('/veedor/:id_usuario', verifyToken, requireOwnVeedorId, getDashboardVeedor);
 router.get(
     '/admin/:id_administrador',
     verifyToken,

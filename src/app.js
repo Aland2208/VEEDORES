@@ -10,15 +10,17 @@ import reporteRouters from './routes/reporte.routes.js'
 import dashboardRouters from './routes/dashboard.routes.js';
 import administradorR from './routes/admin.routes.js';
 import usuariosR from './routes/usuario.routes.js';
+import { CORS_ORIGINS } from './config.js';
 
 const app = express();
 
 app.use(express.json({ limit: '1mb' })); // la app trabajara con JSON limitado
 
 const corsOptions = {
-  origin: '*',
+  origin: CORS_ORIGINS,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-  credentials: true
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Device-Key'],
+  credentials: false
 }
 app.use(cors(corsOptions))
 

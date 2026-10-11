@@ -15,7 +15,7 @@ export const buscarAdministradorPorCorreo = async (req, res) => {
         if (correo.length > 150) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: 'El correo electrónico no puede superar 150 caracteres.'
+                mensaje: 'El correo electrónico no es válido.'
             });
         }
 
@@ -561,7 +561,7 @@ export const getVeedoresHistorial = async (req, res) => {
         }
 
         const [veedores] = await conmysql.query(`
-            SELECT
+            SELECT 
                 u.id_usuario,
                 u.nombre,
                 u.apellido,
@@ -795,7 +795,7 @@ export const guardarUrlCamaraAdmin = async (req, res) => {
         if (urlCamara.length > 2048) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: 'La URL no puede superar 2048 caracteres.'
+                mensaje: 'La URL no es válida.'
             });
         }
 
@@ -922,7 +922,8 @@ export const obtenerUrlCamaraVinculada = async (req, res) => {
         );
 
         // 3. Consultar la lista de veedores activos vinculados a este administrador
-        const [veedores] = await conmysql.query(
+        const [veedores] = Number(req.usuario?.id_rol) === 1
+            ? await conmysql.query(
             `SELECT 
                 u.id_usuario,
                 u.nombre,
@@ -936,7 +937,8 @@ export const obtenerUrlCamaraVinculada = async (req, res) => {
                AND u.id_rol = 2
              ORDER BY u.nombre ASC, u.apellido ASC`,
             [idAdminObjetivo]
-        );
+            )
+            : [[]];
 
         return res.status(200).json({
             estado: 1,

@@ -8,9 +8,11 @@ export function esCorreoValido(correo) {
     return usuario.length <= 64 && dominio.length <= 253;
 }
 
+export const PASSWORD_MAX_BYTES = 72;
+
 export function passwordValida(password) {
     const valor = String(password || '');
-    return Buffer.byteLength(valor, 'utf8') <= 72 &&
+    return Buffer.byteLength(valor, 'utf8') <= PASSWORD_MAX_BYTES &&
         valor.length >= 8 &&
         /[a-z]/.test(valor) &&
         /[A-Z]/.test(valor) &&
