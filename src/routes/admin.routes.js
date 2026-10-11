@@ -14,11 +14,22 @@ import {
     guardarUrlCamaraAdmin,
     obtenerUrlCamaraVinculada
 } from '../controladores/administradorC.js';
+import {
+    requireAdmin,
+    requireOwnAdminId,
+    verifyToken
+} from '../middlewares/verifyToken.js';
 
 const router = Router();
 
 router.get('/buscar', buscarAdministradorPorCorreo);
-router.get('/usuarios/:id_administrador', getUsuariosAdministrador);
+router.get(
+    '/usuarios/:id_administrador',
+    verifyToken,
+    requireAdmin,
+    requireOwnAdminId,
+    getUsuariosAdministrador
+);
 router.get('/disponibles', getUsuariosDisponibles);
 router.get('/historial/:id_usuario', getHistorialUsuario);
 

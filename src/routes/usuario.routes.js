@@ -5,9 +5,11 @@ import {
     editarObservador,
     cambiarEstadoObservador
 } from '../controladores/usuariosC.js';
+import { requireAdmin, verifyToken } from '../middlewares/verifyToken.js';
 
 const router=Router();
 
+router.use(verifyToken, requireAdmin);
 router.get('/observadores',getObservadores);
 router.post('/observadores',crearObservador);
 router.patch('/observadores/:id_usuario',editarObservador);

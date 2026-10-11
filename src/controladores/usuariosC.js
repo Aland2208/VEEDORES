@@ -5,18 +5,25 @@ import { esCorreoValido, passwordValida } from '../utilidades/correo.js';
 /* LISTAR OBSERVADORES */
 export const getObservadores=async(req,res)=>{
     try{
+        const idAdministrador=Number(req.usuario.id_usuario);
         const [usuarios]=await conmysql.query(`
             SELECT
-                id_usuario,
-                nombre,
-                apellido,
-                correo,
-                estado,
-                fecha_creacion
-            FROM usuarios
-            WHERE id_rol=2
-            ORDER BY nombre ASC,apellido ASC
-        `);
+                u.id_usuario,
+                u.nombre,
+                u.apellido,
+                u.correo,
+                u.estado,
+                u.fecha_creacion
+            FROM administrador a
+            INNER JOIN usuarios u ON u.id_usuario=a.id_usuario
+            INNER JOIN usuarios admin ON admin.id_usuario=a.id_administrador
+            WHERE a.id_administrador=?
+              AND a.fecha_fin IS NULL
+              AND u.id_rol=2
+              AND admin.id_rol=1
+              AND admin.estado=1
+            ORDER BY u.nombre ASC,u.apellido ASC
+        `,[idAdministrador]);
 
         return res.status(200).json({
             estado:1,
@@ -35,13 +42,21 @@ export const getObservadores=async(req,res)=>{
 
 /* CREAR OBSERVADOR */
 export const crearObservador=async(req,res)=>{
+    let conexion;
     try{
-        let {nombre,apellido,correo,password}=req.body;
+        let {nombre,apellido,correo,password}=req.body||{};
 
-        nombre=String(nombre||'').trim();
-        apellido=String(apellido||'').trim();
-        correo=String(correo||'').trim().toLowerCase();
-        password=String(password||'');
+        if(typeof nombre!=='string'||typeof apellido!=='string'||
+           typeof correo!=='string'||typeof password!=='string'){
+            return res.status(400).json({
+                estado:0,
+                mensaje:'Completa todos los campos con un formato válido.'
+            });
+        }
+
+        nombre=nombre.trim();
+        apellido=apellido.trim();
+        correo=correo.trim().toLowerCase();
 
         if(!nombre||!apellido||!correo||!password){
             return res.status(400).json({
@@ -50,7 +65,11 @@ export const crearObservador=async(req,res)=>{
             });
         }
 
-        if(nombre.length>100||apellido.length>100||!esCorreoValido(correo)){
+        const patronNombre=/^[\p{L}]+(?:[ '-][\p{L}]+)*$/u;
+        if(nombre.length<2||apellido.length<2||
+           nombre.length>100||apellido.length>100||
+           !patronNombre.test(nombre)||!patronNombre.test(apellido)||
+           !esCorreoValido(correo)){
             return res.status(400).json({
                 estado:0,
                 mensaje:'Nombre, apellido o correo no válidos.'
@@ -64,7 +83,27 @@ export const crearObservador=async(req,res)=>{
             });
         }
 
-        const [existente]=await conmysql.query(`
+        const passwordHash=await bcrypt.hash(password,10);
+        conexion=await conmysql.getConnection();
+        await conexion.beginTransaction();
+
+        const idAdministrador=Number(req.usuario.id_usuario);
+        const [administradorActivo]=await conexion.query(`
+            SELECT id_usuario
+            FROM usuarios
+            WHERE id_usuario=? AND id_rol=1 AND estado=1
+            LIMIT 1
+        `,[idAdministrador]);
+
+        if(administradorActivo.length===0){
+            await conexion.rollback();
+            return res.status(403).json({
+                estado:0,
+                mensaje:'La cuenta administradora no está activa.'
+            });
+        }
+
+        const [existente]=await conexion.query(`
             SELECT id_usuario
             FROM usuarios
             WHERE LOWER(correo)=?
@@ -72,15 +111,14 @@ export const crearObservador=async(req,res)=>{
         `,[correo]);
 
         if(existente.length>0){
+            await conexion.rollback();
             return res.status(409).json({
                 estado:0,
                 mensaje:'Ya existe una cuenta registrada con este correo.'
             });
         }
 
-        const passwordHash=await bcrypt.hash(password,10);
-
-        const [resultado]=await conmysql.query(`
+        const [resultado]=await conexion.query(`
             INSERT INTO usuarios(
                 id_rol,
                 nombre,
@@ -101,6 +139,21 @@ export const crearObservador=async(req,res)=>{
             )
         `,[nombre,apellido,correo,passwordHash]);
 
+        await conexion.query(`
+            INSERT INTO administrador(
+                id_administrador,
+                id_usuario,
+                fecha_inicio
+            )
+            VALUES(
+                ?,
+                ?,
+                DATE_SUB(UTC_TIMESTAMP(),INTERVAL 5 HOUR)
+            )
+        `,[idAdministrador,resultado.insertId]);
+
+        await conexion.commit();
+
         return res.status(201).json({
             estado:1,
             mensaje:'Observador creado correctamente.',
@@ -113,11 +166,22 @@ export const crearObservador=async(req,res)=>{
             }
         });
     }catch(error){
+        if(conexion) await conexion.rollback();
+
+        if(error.code==='ER_DUP_ENTRY'){
+            return res.status(409).json({
+                estado:0,
+                mensaje:'Ya existe una cuenta registrada con este correo.'
+            });
+        }
+
         
         return res.status(500).json({
             estado:0,
             mensaje:'Error al crear el observador.'
         });
+    }finally{
+        if(conexion) conexion.release();
     }
 };
 
@@ -127,11 +191,14 @@ export const editarObservador=async(req,res)=>{
     try{
         const idUsuario=Number(req.params.id_usuario);
 
-        let {nombre,apellido,correo}=req.body;
+        const {nombre,apellido}=req.body||{};
 
-        nombre=String(nombre||'').trim();
-        apellido=String(apellido||'').trim();
-        correo=String(correo||'').trim().toLowerCase();
+        if(Object.prototype.hasOwnProperty.call(req.body||{},'correo')){
+            return res.status(400).json({
+                estado:0,
+                mensaje:'El correo no se puede modificar desde esta pantalla.'
+            });
+        }
 
         if(!Number.isInteger(idUsuario)||idUsuario<=0){
             return res.status(400).json({
@@ -140,27 +207,38 @@ export const editarObservador=async(req,res)=>{
             });
         }
 
-        if(!nombre||!apellido||!correo){
+        if(typeof nombre!=='string'||typeof apellido!=='string'){
             return res.status(400).json({
                 estado:0,
-                mensaje:'Nombre, apellido y correo son obligatorios.'
+                mensaje:'El nombre y el apellido son obligatorios.'
             });
         }
 
-        if(nombre.length>100||apellido.length>100||!esCorreoValido(correo)){
+        const nombreLimpio=nombre.trim();
+        const apellidoLimpio=apellido.trim();
+        const patronNombre=/^[\p{L}]+(?:[ '-][\p{L}]+)*$/u;
+        if(nombreLimpio.length<2||apellidoLimpio.length<2||
+           nombreLimpio.length>100||apellidoLimpio.length>100||
+           !patronNombre.test(nombreLimpio)||!patronNombre.test(apellidoLimpio)){
             return res.status(400).json({
                 estado:0,
-                mensaje:'Nombre, apellido o correo no válidos.'
+                mensaje:'El nombre o el apellido no son válidos.'
             });
         }
 
         const [usuario]=await conmysql.query(`
-            SELECT id_usuario
-            FROM usuarios
-            WHERE id_usuario=?
-              AND id_rol=2
+            SELECT u.id_usuario
+            FROM usuarios u
+            INNER JOIN administrador a ON a.id_usuario=u.id_usuario
+            INNER JOIN usuarios admin ON admin.id_usuario=a.id_administrador
+            WHERE u.id_usuario=?
+              AND u.id_rol=2
+              AND a.id_administrador=?
+              AND a.fecha_fin IS NULL
+              AND admin.id_rol=1
+              AND admin.estado=1
             LIMIT 1
-        `,[idUsuario]);
+        `,[idUsuario,Number(req.usuario.id_usuario)]);
 
         if(usuario.length===0){
             return res.status(404).json({
@@ -169,39 +247,22 @@ export const editarObservador=async(req,res)=>{
             });
         }
 
-        const [correoExistente]=await conmysql.query(`
-            SELECT id_usuario
-            FROM usuarios
-            WHERE LOWER(correo)=?
-              AND id_usuario<>?
-            LIMIT 1
-        `,[correo,idUsuario]);
-
-        if(correoExistente.length>0){
-            return res.status(409).json({
-                estado:0,
-                mensaje:'El correo ya está registrado por otro usuario.'
-            });
-        }
-
         await conmysql.query(`
             UPDATE usuarios
             SET
                 nombre=?,
-                apellido=?,
-                correo=?
+                apellido=?
             WHERE id_usuario=?
               AND id_rol=2
-        `,[nombre,apellido,correo,idUsuario]);
+        `,[nombreLimpio,apellidoLimpio,idUsuario]);
 
         return res.status(200).json({
             estado:1,
             mensaje:'Observador actualizado correctamente.',
             data:{
                 id_usuario:idUsuario,
-                nombre,
-                apellido,
-                correo
+                nombre:nombreLimpio,
+                apellido:apellidoLimpio
             }
         });
     }catch(error){
@@ -235,12 +296,18 @@ export const cambiarEstadoObservador=async(req,res)=>{
         }
 
         const [usuario]=await conmysql.query(`
-            SELECT id_usuario,estado
-            FROM usuarios
-            WHERE id_usuario=?
-              AND id_rol=2
+            SELECT u.id_usuario,u.estado
+            FROM usuarios u
+            INNER JOIN administrador a ON a.id_usuario=u.id_usuario
+            INNER JOIN usuarios admin ON admin.id_usuario=a.id_administrador
+            WHERE u.id_usuario=?
+              AND u.id_rol=2
+              AND a.id_administrador=?
+              AND a.fecha_fin IS NULL
+              AND admin.id_rol=1
+              AND admin.estado=1
             LIMIT 1
-        `,[idUsuario]);
+        `,[idUsuario,Number(req.usuario.id_usuario)]);
 
         if(usuario.length===0){
             return res.status(404).json({

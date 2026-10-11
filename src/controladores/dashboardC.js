@@ -18,7 +18,11 @@ export const getDashboardVeedor=async(req,res)=>{
 
         const fechaEcuador=fechaResultado[0].fecha_ecuador;
 
-        
+        const [fechaAnteriorResultado]=await conmysql.query(`
+            SELECT DATE_SUB(?,INTERVAL 1 DAY) AS fecha_anterior
+        `,[fechaEcuador]);
+        const fechaAnterior=fechaAnteriorResultado[0].fecha_anterior;
+
         
 
         // RESUMEN GENERAL
@@ -36,6 +40,21 @@ export const getDashboardVeedor=async(req,res)=>{
               AND c.fecha_hora>=?
               AND c.fecha_hora<DATE_ADD(?,INTERVAL 1 DAY)
         `,[idUsuario,fechaEcuador,fechaEcuador]);
+
+        const [resumenAnterior]=await conmysql.query(`
+            SELECT
+                COUNT(c.id_captura) AS total_capturas,
+                COALESCE(SUM(c.peso),0) AS peso_total,
+                COALESCE(AVG(d.porcentaje),0) AS confianza_promedio,
+                COUNT(DISTINCT d.id_especie) AS total_especies
+            FROM capturas c
+            INNER JOIN detecciones d
+                ON c.id_deteccion=d.id_deteccion
+            WHERE c.id_usuario=?
+              AND c.estado=1
+              AND c.fecha_hora>=?
+              AND c.fecha_hora<DATE_ADD(?,INTERVAL 1 DAY)
+        `,[idUsuario,fechaAnterior,fechaAnterior]);
 
         // DISTRIBUCIÓN POR ESPECIE
         const [especies]=await conmysql.query(`
@@ -61,6 +80,20 @@ export const getDashboardVeedor=async(req,res)=>{
                 e.nombre_cientifico
             ORDER BY total_capturas DESC
         `,[idUsuario,fechaEcuador,fechaEcuador]);
+
+        const [actividadAnterior]=await conmysql.query(`
+            SELECT
+                HOUR(c.fecha_hora) AS hora,
+                COUNT(c.id_captura) AS total_capturas,
+                COALESCE(SUM(c.peso),0) AS peso_total
+            FROM capturas c
+            WHERE c.id_usuario=?
+              AND c.estado=1
+              AND c.fecha_hora>=?
+              AND c.fecha_hora<DATE_ADD(?,INTERVAL 1 DAY)
+            GROUP BY HOUR(c.fecha_hora)
+            ORDER BY hora ASC
+        `,[idUsuario,fechaAnterior,fechaAnterior]);
 
         // ACTIVIDAD POR HORA
         const [actividad]=await conmysql.query(`
@@ -91,6 +124,18 @@ export const getDashboardVeedor=async(req,res)=>{
                     confianza_promedio:Number(resumen[0]?.confianza_promedio||0),
                     total_especies:Number(resumen[0]?.total_especies||0)
                 },
+                comparacion:{
+                    periodo_anterior:{
+                        desde:fechaAnterior,
+                        hasta:fechaAnterior
+                    },
+                    resumen:{
+                        total_capturas:Number(resumenAnterior[0]?.total_capturas||0),
+                        peso_total:Number(resumenAnterior[0]?.peso_total||0),
+                        confianza_promedio:Number(resumenAnterior[0]?.confianza_promedio||0),
+                        total_especies:Number(resumenAnterior[0]?.total_especies||0)
+                    }
+                },
                 especies:especies.map(item=>({
                     id_especie:item.id_especie,
                     nombre_comun:item.nombre_comun,
@@ -100,6 +145,11 @@ export const getDashboardVeedor=async(req,res)=>{
                     confianza_promedio:Number(item.confianza_promedio||0)
                 })),
                 actividad:actividad.map(item=>({
+                    hora:Number(item.hora),
+                    total_capturas:Number(item.total_capturas||0),
+                    peso_total:Number(item.peso_total||0)
+                })),
+                actividad_anterior:actividadAnterior.map(item=>({
                     hora:Number(item.hora),
                     total_capturas:Number(item.total_capturas||0),
                     peso_total:Number(item.peso_total||0)
@@ -216,17 +266,23 @@ export const getDashboardAdministrador=async(req,res)=>{
   const filtroUsuarioCaptura=idUsuario!==null?' AND c.id_usuario=?':'';
   const filtroUsuarioReporte=idUsuario!==null?' AND rep.id_usuario=?':'';
 
+  const [duracionResultado]=await conmysql.query(`
+   SELECT DATEDIFF(?,?)+1 AS dias
+  `,[hasta,desde]);
+  const duracion=Math.max(Number(duracionResultado[0]?.dias||1),1);
+  const [rangoAnteriorResultado]=await conmysql.query(`
+   SELECT
+    DATE_SUB(?,INTERVAL ? DAY) AS desde,
+    DATE_SUB(?,INTERVAL 1 DAY) AS hasta
+  `,[desde,duracion,desde]);
+  const periodoAnterior={
+   desde:rangoAnteriorResultado[0].desde,
+   hasta:rangoAnteriorResultado[0].hasta
+  };
+
   // =====================================================
   // RESUMEN DE CAPTURAS
   // =====================================================
-  const parametrosResumenCapturas=[
-   idAdministrador,
-   desde,
-   hasta
-  ];
-
-  if(idUsuario!==null)parametrosResumenCapturas.push(idUsuario);
-
   const [resumenCapturas]=await conmysql.query(`
    SELECT
     COUNT(c.id_captura) AS total_capturas,
@@ -250,6 +306,33 @@ export const getDashboardAdministrador=async(req,res)=>{
   `,[
    desde,
    hasta,
+   idAdministrador,
+   ...(idUsuario!==null?[idUsuario]:[])
+  ]);
+
+  const [resumenCapturasAnterior]=await conmysql.query(`
+   SELECT
+    COUNT(c.id_captura) AS total_capturas,
+    COALESCE(SUM(c.peso),0) AS peso_total,
+    COALESCE(AVG(d.porcentaje),0) AS confianza_promedio,
+    COUNT(DISTINCT d.id_especie) AS total_especies
+   FROM capturas c
+   INNER JOIN detecciones d ON c.id_deteccion=d.id_deteccion
+   WHERE c.estado=1
+    AND c.fecha_hora>=?
+    AND c.fecha_hora<DATE_ADD(?,INTERVAL 1 DAY)
+    AND EXISTS(
+     SELECT 1
+     FROM administrador a
+     WHERE a.id_administrador=?
+      AND a.id_usuario=c.id_usuario
+      AND c.fecha_hora>=a.fecha_inicio
+      AND (a.fecha_fin IS NULL OR c.fecha_hora<a.fecha_fin)
+    )
+    ${filtroUsuarioCaptura}
+  `,[
+   periodoAnterior.desde,
+   periodoAnterior.hasta,
    idAdministrador,
    ...(idUsuario!==null?[idUsuario]:[])
   ]);
@@ -296,6 +379,44 @@ export const getDashboardAdministrador=async(req,res)=>{
   `,[
    desde,
    hasta,
+   idAdministrador,
+   ...(idUsuario!==null?[idUsuario]:[])
+  ]);
+
+  const [resumenReportesAnterior]=await conmysql.query(`
+   SELECT
+    COUNT(rep.id_reporte) AS total_reportes,
+    SUM(
+     CASE
+      WHEN rep.id_tipo_reporte IS NOT NULL
+       AND rep.titulo IS NOT NULL
+       AND TRIM(rep.titulo)<>''
+      THEN 1 ELSE 0
+     END
+    ) AS reportes_completos,
+    SUM(
+     CASE
+      WHEN rep.id_tipo_reporte IS NULL
+       OR rep.titulo IS NULL
+       OR TRIM(rep.titulo)=''
+      THEN 1 ELSE 0
+     END
+    ) AS reportes_incompletos
+   FROM reportes rep
+   WHERE rep.fecha_generacion>=?
+    AND rep.fecha_generacion<DATE_ADD(?,INTERVAL 1 DAY)
+    AND EXISTS(
+     SELECT 1
+     FROM administrador a
+     WHERE a.id_administrador=?
+      AND a.id_usuario=rep.id_usuario
+      AND rep.fecha_generacion>=a.fecha_inicio
+      AND (a.fecha_fin IS NULL OR rep.fecha_generacion<a.fecha_fin)
+    )
+    ${filtroUsuarioReporte}
+  `,[
+   periodoAnterior.desde,
+   periodoAnterior.hasta,
    idAdministrador,
    ...(idUsuario!==null?[idUsuario]:[])
   ]);
@@ -482,6 +603,7 @@ export const getDashboardAdministrador=async(req,res)=>{
   // OTROS PERÍODOS = POR DÍA
   // =====================================================
   let actividad=[];
+  let actividadAnterior=[];
 
   if(periodo==='hoy'){
    const [resultado]=await conmysql.query(`
@@ -517,6 +639,39 @@ export const getDashboardAdministrador=async(req,res)=>{
    ]);
 
    actividad=resultado.map(item=>({
+    hora:Number(item.hora),
+    total_capturas:Number(item.total_capturas||0),
+    peso_total:Number(item.peso_total||0)
+   }));
+
+   const [resultadoAnterior]=await conmysql.query(`
+    SELECT
+     HOUR(c.fecha_hora) AS hora,
+     COUNT(c.id_captura) AS total_capturas,
+     COALESCE(SUM(c.peso),0) AS peso_total
+    FROM capturas c
+    WHERE c.estado=1
+     AND c.fecha_hora>=?
+     AND c.fecha_hora<DATE_ADD(?,INTERVAL 1 DAY)
+     AND EXISTS(
+      SELECT 1
+      FROM administrador a
+      WHERE a.id_administrador=?
+       AND a.id_usuario=c.id_usuario
+       AND c.fecha_hora>=a.fecha_inicio
+       AND (a.fecha_fin IS NULL OR c.fecha_hora<a.fecha_fin)
+     )
+     ${filtroUsuarioCaptura}
+    GROUP BY HOUR(c.fecha_hora)
+    ORDER BY hora ASC
+   `,[
+    periodoAnterior.desde,
+    periodoAnterior.hasta,
+    idAdministrador,
+    ...(idUsuario!==null?[idUsuario]:[])
+   ]);
+
+   actividadAnterior=resultadoAnterior.map(item=>({
     hora:Number(item.hora),
     total_capturas:Number(item.total_capturas||0),
     peso_total:Number(item.peso_total||0)
@@ -559,6 +714,39 @@ export const getDashboardAdministrador=async(req,res)=>{
     total_capturas:Number(item.total_capturas||0),
     peso_total:Number(item.peso_total||0)
    }));
+
+   const [resultadoAnterior]=await conmysql.query(`
+    SELECT
+     DATE_FORMAT(c.fecha_hora,'%Y-%m-%d') AS fecha,
+     COUNT(c.id_captura) AS total_capturas,
+     COALESCE(SUM(c.peso),0) AS peso_total
+    FROM capturas c
+    WHERE c.estado=1
+     AND c.fecha_hora>=?
+     AND c.fecha_hora<DATE_ADD(?,INTERVAL 1 DAY)
+     AND EXISTS(
+      SELECT 1
+      FROM administrador a
+      WHERE a.id_administrador=?
+       AND a.id_usuario=c.id_usuario
+       AND c.fecha_hora>=a.fecha_inicio
+       AND (a.fecha_fin IS NULL OR c.fecha_hora<a.fecha_fin)
+     )
+     ${filtroUsuarioCaptura}
+    GROUP BY DATE(c.fecha_hora)
+    ORDER BY DATE(c.fecha_hora) ASC
+   `,[
+    periodoAnterior.desde,
+    periodoAnterior.hasta,
+    idAdministrador,
+    ...(idUsuario!==null?[idUsuario]:[])
+   ]);
+
+   actividadAnterior=resultadoAnterior.map(item=>({
+    fecha:item.fecha,
+    total_capturas:Number(item.total_capturas||0),
+    peso_total:Number(item.peso_total||0)
+   }));
   }
 
   const rCapturas=resumenCapturas[0]||{};
@@ -586,6 +774,19 @@ export const getDashboardAdministrador=async(req,res)=>{
      reportes_incompletos:Number(rReportes.reportes_incompletos||0)
     },
 
+    comparacion:{
+     periodo_anterior:periodoAnterior,
+     resumen:{
+      total_capturas:Number(resumenCapturasAnterior[0]?.total_capturas||0),
+      peso_total:Number(resumenCapturasAnterior[0]?.peso_total||0),
+      confianza_promedio:Number(resumenCapturasAnterior[0]?.confianza_promedio||0),
+      total_especies:Number(resumenCapturasAnterior[0]?.total_especies||0),
+      total_reportes:Number(resumenReportesAnterior[0]?.total_reportes||0),
+      reportes_completos:Number(resumenReportesAnterior[0]?.reportes_completos||0),
+      reportes_incompletos:Number(resumenReportesAnterior[0]?.reportes_incompletos||0)
+     }
+    },
+
     especies:especies.map(item=>({
      id_especie:Number(item.id_especie),
      nombre_comun:item.nombre_comun,
@@ -596,6 +797,7 @@ export const getDashboardAdministrador=async(req,res)=>{
     })),
 
     actividad,
+    actividad_anterior:actividadAnterior,
 
     veedores:veedores.map(item=>({
      id_usuario:Number(item.id_usuario),

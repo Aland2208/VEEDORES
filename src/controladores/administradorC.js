@@ -12,6 +12,13 @@ export const buscarAdministradorPorCorreo = async (req, res) => {
             });
         }
 
+        if (correo.length > 150) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: 'El correo electrónico no puede superar 150 caracteres.'
+            });
+        }
+
         const [administradores] = await conmysql.query(`
             SELECT
                 id_usuario,
@@ -128,9 +135,13 @@ export const getUsuariosAdministrador = async (req, res) => {
             FROM administrador a
             INNER JOIN usuarios u
                 ON u.id_usuario=a.id_usuario
+            INNER JOIN usuarios admin
+                ON admin.id_usuario=a.id_administrador
             WHERE a.id_administrador=?
               AND a.fecha_fin IS NULL
               AND u.id_rol=2
+              AND admin.id_rol=1
+              AND admin.estado=1
             ORDER BY u.nombre ASC,u.apellido ASC
         `, [idAdministrador]);
 

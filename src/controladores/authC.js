@@ -273,7 +273,8 @@ export const loginUsuario = async (req, res) => {
         correo = String(correo || '').trim().toLowerCase();
         password = String(password || '');
 
-        if (!correo || Buffer.byteLength(password, 'utf8') > 72 || !password) {
+        if (!correo || correo.length > 150 ||
+            Buffer.byteLength(password, 'utf8') > 72 || !password) {
             return res.status(400).json({
                 estado: 0,
                 mensaje: 'Correo y contraseña son obligatorios.'
