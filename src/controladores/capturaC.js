@@ -1,5 +1,6 @@
 import { conmysql } from "../db.js";
 import { getIO } from "../websocket/socket.js";
+import { esUrlImagenCloudinaryValida } from "../utilidades/imagen-cloudinary.js";
 
 // ==========================================
 // REGISTRAR CAPTURA COMPLETA
@@ -53,6 +54,13 @@ export const registrarCaptura = async (req, res) => {
             return res.status(400).json({
                 estado: 0,
                 mensaje: "El porcentaje debe estar entre 0 y 100"
+            });
+        }
+
+        if (imagen_url != null && !esUrlImagenCloudinaryValida(imagen_url)) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "La URL de la imagen no es válida."
             });
         }
 
@@ -148,7 +156,9 @@ export const registrarCaptura = async (req, res) => {
         try {
             const io = getIO();
             if (io) {
-                io.emit("nuevaCaptura", registro[0]);
+                io.to(`usuario:${idUsuarioFinal}`)
+                    .to("administradores")
+                    .emit("nuevaCaptura", registro[0]);
             }
         } catch (socketError) {
             

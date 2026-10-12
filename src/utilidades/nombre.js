@@ -23,6 +23,12 @@ const patronesArtificiales = new Set([
     'fefwe', 'fewef', 'fefwef', 'fewefe', 'jfdskl', 'asdfgh', 'zxcvbn',
     'qazwsx', 'wsxedc', 'edcrfv', 'rfvtgb', 'tgbyhn', 'yhnujm', 'ujmikl'
 ]);
+const gruposFinalesConsonanticosReconocidos = new Set([
+    'ch', 'ck', 'ct', 'ds', 'ft', 'gh', 'gn', 'ks', 'ld', 'lf', 'lk', 'lm',
+    'ln', 'lp', 'ls', 'lt', 'lv', 'mb', 'mn', 'mp', 'ms', 'nd', 'ng', 'nk',
+    'nt', 'ph', 'ps', 'pt', 'rd', 'rk', 'rl', 'rm', 'rn', 'rp', 'rt', 'rv',
+    'sc', 'sh', 'sk', 'sm', 'sn', 'sp', 'ss', 'st', 'th', 'tl', 'ts', 'tz'
+]);
 const posicionesTeclado = new Map([
     ...'qwertyuiop'.split('').map((letra, indice) => [letra, [0, indice]]),
     ...'asdfghjkl'.split('').map((letra, indice) => [letra, [1, indice + 0.5]]),
@@ -94,6 +100,14 @@ export function esNombreValido(texto) {
 
         if (nombresBrevesReconocidos.has(normalizada)) {
             continue;
+        }
+
+        const grupoFinal = normalizada.slice(-2);
+        if (
+            /^[bcdfghjklmnpqrstvwxyz]{2}$/.test(grupoFinal) &&
+            !gruposFinalesConsonanticosReconocidos.has(grupoFinal)
+        ) {
+            return false;
         }
 
         if (/^[a-z]+$/.test(normalizada) && pareceRecorridoDeTeclado(normalizada)) {

@@ -34,6 +34,7 @@ test('rejects keyboard walks and repeated artificial syllables', () => {
     assert.equal(esNombreValido('Aaaaa'), false);
     assert.equal(esNombreValido('Fefwe'), false);
     assert.equal(esNombreValido('Jfdskl'), false);
+    assert.equal(esNombreValido('ifeifh'), false);
 });
 
 test('accepts valid names with less common international spelling patterns', () => {

@@ -1,6 +1,8 @@
 import { conmysql } from "../db.js";
 import PDFDocument from "pdfkit";
 import crypto from "node:crypto";
+import { descargarImagenCloudinary } from "../utilidades/imagen-cloudinary.js";
+import { escaparValorCSV } from "../utilidades/seguridad-exportaciones.js";
 
 // ======================================================
 // OBTENER REPORTE DE CAPTURAS DEL USUARIO
@@ -1427,51 +1429,15 @@ const validarTipoReporte = async (
 // DESCARGAR IMAGEN DESDE CLOUDINARY
 // ======================================================
 
-const descargarImagen = async (
-    imagenUrl
-) => {
+const descargarImagen = async (imagenUrl) => {
+    if (!imagenUrl) return null;
 
     try {
-
-        if (!imagenUrl) {
-            return null;
-        }
-
-
-        const respuesta =
-            await fetch(
-                imagenUrl,
-                {
-                    signal:
-                        AbortSignal.timeout(
-                            10000
-                        )
-                }
-            );
-
-
-        if (!respuesta.ok) {
-
-            
-
-            return null;
-        }
-
-
-        const arrayBuffer =
-            await respuesta.arrayBuffer();
-
-
-        return Buffer.from(
-            arrayBuffer
-        );
-
-    }
-
-    catch (error) {
-
-        
-
+        return await descargarImagenCloudinary(imagenUrl);
+    } catch (error) {
+        console.error('No se pudo descargar una imagen de Cloudinary.', {
+            tipo: error instanceof Error ? error.name : 'Error desconocido'
+        });
         return null;
     }
 };
@@ -2872,24 +2838,7 @@ export const generarPDFEspecie = async (
 const escaparCSV = (
     valor
 ) => {
-
-    if (
-        valor === null ||
-        valor === undefined
-    ) {
-        return "";
-    }
-
-
-    const texto =
-        String(valor);
-
-
-    return `"${texto.replace(
-        /"/g,
-        '""'
-    )}"`;
-
+    return escaparValorCSV(valor);
 };
 
 
@@ -4412,12 +4361,7 @@ export const generarCSVReporteAdmin = async (req, res) => {
             });
         }
 
-        // ESCAPAR VALORES PARA CSV
-        const csvValor = (valor) => {
-            if (valor === null || valor === undefined) return "";
-            const texto = String(valor).replace(/"/g, '""');
-            return `"${texto}"`;
-        };
+        const csvValor = escaparValorCSV;
 
         // ENCABEZADOS
         const encabezados = [
