@@ -11,7 +11,7 @@ export async function limpiarCuentasPendientesVencidas() {
 
         const [solicitudesEliminadas] = await conexion.query(`
             DELETE FROM solicitudes_registro
-            WHERE expira <= UTC_TIMESTAMP()
+            WHERE expira <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)
             ORDER BY expira ASC
             LIMIT ${TAMANO_LOTE}
         `);
@@ -22,7 +22,7 @@ export async function limpiarCuentasPendientesVencidas() {
             WHERE u.estado = 0
               AND u.token_verificacion_correo IS NOT NULL
               AND u.verificacion_correo_expira IS NOT NULL
-              AND u.verificacion_correo_expira <= UTC_TIMESTAMP()
+              AND u.verificacion_correo_expira <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)
               AND NOT EXISTS (
                   SELECT 1
                   FROM capturas c
@@ -62,7 +62,7 @@ export async function limpiarCuentasPendientesVencidas() {
             WHERE id_usuario IN (${placeholders})
               AND estado = 0
               AND token_verificacion_correo IS NOT NULL
-              AND verificacion_correo_expira <= UTC_TIMESTAMP()
+              AND verificacion_correo_expira <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)
         `, ids);
 
         await conexion.commit();

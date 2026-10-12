@@ -381,7 +381,7 @@ export const reasignarUsuario = async (req, res) => {
         const [fecha] = await conexion.query(`
             SELECT
                 DATE_SUB(
-                    UTC_TIMESTAMP(),
+                    DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR),
                     INTERVAL 5 HOUR
                 ) AS fecha_cambio
         `);
@@ -454,7 +454,7 @@ export const quitarUsuarioAdministrador = async (req, res) => {
             UPDATE administrador
             SET fecha_fin=
                 DATE_SUB(
-                    UTC_TIMESTAMP(),
+                    DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR),
                     INTERVAL 5 HOUR
                 )
             WHERE id_administrador=?

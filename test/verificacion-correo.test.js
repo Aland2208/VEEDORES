@@ -6,6 +6,7 @@ import {
     enviarCorreoVerificacion,
     servicioVerificacionCorreoConfigurado
 } from '../src/utilidades/verificacion-correo.js';
+import { fechaMysqlEcuador } from '../src/utilidades/fecha-ecuador.js';
 
 test('creates a random verification token with a hashed storage value and 15-minute expiry', () => {
     const before = Date.now();
@@ -19,6 +20,11 @@ test('creates a random verification token with a hashed storage value and 15-min
         crypto.createHash('sha256').update(first.token).digest('hex')
     );
     assert.equal(first.expira.getTime() >= before + 15 * 60 * 1000, true);
+});
+
+test('converts stored expiration dates to Ecuador UTC-5 without changing their actual instant', () => {
+    const expiry = new Date('2026-10-12T01:00:00.000Z');
+    assert.equal(fechaMysqlEcuador(expiry), '2026-10-11 20:00:00');
 });
 
 test('requires both email and frontend configuration', () => {

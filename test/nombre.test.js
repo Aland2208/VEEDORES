@@ -20,3 +20,16 @@ test('rejects repeated alternating text and malformed name input', () => {
 test("does not claim to verify a person's identity from their name", () => {
     assert.equal(esNombreValido('Asad'), true);
 });
+
+test('rejects common placeholder, bot, and random-looking names', () => {
+    assert.equal(esNombreValido('Waos'), false);
+    assert.equal(esNombreValido('Qwerty'), false);
+    assert.equal(esNombreValido('TestUser'), false);
+});
+
+test('accepts valid names with less common international spelling patterns', () => {
+    assert.equal(esNombreValido('Xochitl'), true);
+    assert.equal(esNombreValido('Ng'), true);
+    assert.equal(esNombreValido('Bjørn'), true);
+    assert.equal(esNombreValido('Иван'), true);
+});

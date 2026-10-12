@@ -42,7 +42,7 @@ test('creates the account only after the email verification request succeeds', a
             statements.push(sql);
 
             if (sql.includes('INSERT INTO solicitudes_registro')) {
-                assert.match(sql, /fecha_creacion[\s\S]*UTC_TIMESTAMP\(\)/);
+                assert.match(sql, /fecha_creacion[\s\S]*DATE_SUB\(UTC_TIMESTAMP\(\), INTERVAL 5 HOUR\)/);
                 pendingRequest = {
                     id_solicitud: 1,
                     nombre: params[0],
@@ -58,7 +58,7 @@ test('creates the account only after the email verification request succeeds', a
             }
 
             if (sql.includes('WHERE token_hash = ?')) {
-                assert.match(sql, /expira > UTC_TIMESTAMP\(\)/);
+                assert.match(sql, /expira > DATE_SUB\(UTC_TIMESTAMP\(\), INTERVAL 5 HOUR\)/);
                 return [[pendingRequest], []];
             }
 
@@ -180,7 +180,7 @@ test('continues to verify legacy pending accounts using their stored token hash'
         query: async (sql, params = []) => {
             if (sql.includes('WHERE token_hash = ?')) return [[], []];
             if (sql.includes('token_verificacion_correo = ?')) {
-                assert.match(sql, /verificacion_correo_expira > UTC_TIMESTAMP\(\)/);
+                assert.match(sql, /verificacion_correo_expira > DATE_SUB\(UTC_TIMESTAMP\(\), INTERVAL 5 HOUR\)/);
                 legacyLookupHash = params[0];
                 return [[{ id_usuario: 77 }], []];
             }
@@ -239,7 +239,7 @@ test('creates an administrator-requested observer only after confirmation and li
             if (sql.includes('LOWER(correo)')) return [[], []];
             if (sql.includes('SELECT id_solicitud')) return [[], []];
             if (sql.includes('INSERT INTO solicitudes_registro')) {
-                assert.match(sql, /fecha_creacion[\s\S]*UTC_TIMESTAMP\(\)/);
+                assert.match(sql, /fecha_creacion[\s\S]*DATE_SUB\(UTC_TIMESTAMP\(\), INTERVAL 5 HOUR\)/);
                 pendingRequest = {
                     id_solicitud: 2,
                     nombre: params[0],
@@ -253,7 +253,7 @@ test('creates an administrator-requested observer only after confirmation and li
                 return [{ affectedRows: 1, insertId: 2 }, []];
             }
             if (sql.includes('WHERE token_hash = ?')) {
-                assert.match(sql, /expira > UTC_TIMESTAMP\(\)/);
+                assert.match(sql, /expira > DATE_SUB\(UTC_TIMESTAMP\(\), INTERVAL 5 HOUR\)/);
                 return [[pendingRequest], []];
             }
             if (sql.includes('WHERE correo = ?')) return [[], []];

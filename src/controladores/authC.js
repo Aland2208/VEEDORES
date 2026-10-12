@@ -8,6 +8,7 @@ import {
     PASSWORD_MAX_BYTES
 } from "../utilidades/correo.js";
 import { esNombreValido } from "../utilidades/nombre.js";
+import { fechaMysqlEcuador } from "../utilidades/fecha-ecuador.js";
 import {
     crearTokenVerificacionCorreo,
     enviarCorreoVerificacion,
@@ -124,14 +125,14 @@ export const registrarUsuario = async (req, res) => {
         await conexion.query(`
             DELETE FROM solicitudes_registro
             WHERE correo = ?
-              AND expira <= UTC_TIMESTAMP()
+              AND expira <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)
         `, [correo]);
 
         const [solicitudesExistentes] = await conexion.query(`
             SELECT id_solicitud
             FROM solicitudes_registro
             WHERE correo = ?
-              AND expira > UTC_TIMESTAMP()
+              AND expira > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)
             LIMIT 1
             FOR UPDATE
         `, [correo]);
@@ -148,7 +149,7 @@ export const registrarUsuario = async (req, res) => {
             INSERT INTO solicitudes_registro
                 (nombre, apellido, correo, password_hash, id_rol,
                  id_administrador, token_hash, expira, fecha_creacion)
-            VALUES (?, ?, ?, ?, ?, NULL, ?, ?, UTC_TIMESTAMP())
+            VALUES (?, ?, ?, ?, ?, NULL, ?, ?, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR))
         `, [
             nombreFormateado,
             apellidoFormateado,
@@ -156,7 +157,7 @@ export const registrarUsuario = async (req, res) => {
             hash,
             Number(id_rol),
             tokenHash,
-            expira.toISOString().slice(0, 19).replace('T', ' ')
+            fechaMysqlEcuador(expira)
         ]);
 
         try {
@@ -224,7 +225,7 @@ export const verificarCorreo = async (req, res) => {
                 id_administrador
             FROM solicitudes_registro
             WHERE token_hash = ?
-              AND expira > UTC_TIMESTAMP()
+              AND expira > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)
             LIMIT 1
             FOR UPDATE
         `, [tokenHash]);
@@ -235,7 +236,7 @@ export const verificarCorreo = async (req, res) => {
                 FROM usuarios
                 WHERE token_verificacion_correo = ?
                   AND estado = 0
-                  AND verificacion_correo_expira > UTC_TIMESTAMP()
+                  AND verificacion_correo_expira > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)
                 LIMIT 1
                 FOR UPDATE
             `, [tokenHash]);
@@ -506,13 +507,12 @@ export const solicitarRecuperacion = async (req, res) => {
         }
 
         const tokenRecuperacion = crypto.randomBytes(20).toString("hex");
-        const fechaExpira = new Date(Date.now() + 3600000);
-
         const [resultado] = await conmysql.query(
             `UPDATE usuarios
-             SET reset_token=?, reset_token_expira=?
+             SET reset_token=?,
+                 reset_token_expira=DATE_ADD(DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR), INTERVAL 1 HOUR)
              WHERE correo=?`,
-            [tokenRecuperacion, fechaExpira, correo]
+            [tokenRecuperacion, correo]
         );
 
         if (resultado.affectedRows === 0) {
@@ -684,14 +684,12 @@ export const restablecerPassword = async (req, res) => {
             });
         }
 
-        const ahora = new Date();
-
         const [usuarios] = await conmysql.query(
             `SELECT *
              FROM usuarios
              WHERE reset_token=?
-             AND reset_token_expira>?`,
-            [token, ahora]
+             AND reset_token_expira>DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)`,
+            [token]
         );
 
         if (usuarios.length === 0) {
@@ -1013,14 +1011,12 @@ export const validarTokenRecuperacion = async (req, res) => {
             });
         }
 
-        const ahora = new Date();
-
         const [usuarios] = await conmysql.query(
             `SELECT id_usuario
              FROM usuarios
              WHERE reset_token=?
-             AND reset_token_expira>?`,
-            [token, ahora]
+             AND reset_token_expira>DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)`,
+            [token]
         );
 
         if (usuarios.length === 0) {

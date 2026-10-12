@@ -2,6 +2,7 @@ import { conmysql } from '../db.js';
 import bcrypt from 'bcrypt';
 import { esCorreoValido, passwordValida } from '../utilidades/correo.js';
 import { esNombreValido } from '../utilidades/nombre.js';
+import { fechaMysqlEcuador } from '../utilidades/fecha-ecuador.js';
 import {
     crearTokenVerificacionCorreo,
     enviarCorreoVerificacion,
@@ -47,7 +48,7 @@ export const getObservadores=async(req,res)=>{
                AND admin.estado = 1
             WHERE s.id_administrador = ?
               AND s.id_rol = 2
-              AND s.expira > UTC_TIMESTAMP()
+              AND s.expira > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)
             ORDER BY s.fecha_creacion DESC
         `,[idAdministrador]);
 
@@ -159,14 +160,14 @@ export const crearObservador=async(req,res)=>{
         await conexion.query(`
             DELETE FROM solicitudes_registro
             WHERE correo = ?
-              AND expira <= UTC_TIMESTAMP()
+              AND expira <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)
         `,[correo]);
 
         const [solicitudExistente]=await conexion.query(`
             SELECT id_solicitud
             FROM solicitudes_registro
             WHERE correo = ?
-              AND expira > UTC_TIMESTAMP()
+              AND expira > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)
             LIMIT 1
             FOR UPDATE
         `,[correo]);
@@ -191,7 +192,7 @@ export const crearObservador=async(req,res)=>{
                 expira,
                 fecha_creacion
             )
-            VALUES(?, ?, ?, ?, 2, ?, ?, ?, UTC_TIMESTAMP())
+            VALUES(?, ?, ?, ?, 2, ?, ?, ?, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR))
         `,[
             nombre,
             apellido,
@@ -199,7 +200,7 @@ export const crearObservador=async(req,res)=>{
             passwordHash,
             idAdministrador,
             tokenHash,
-            expira.toISOString().slice(0,19).replace('T',' ')
+            fechaMysqlEcuador(expira)
         ]);
         
 

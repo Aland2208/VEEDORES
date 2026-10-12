@@ -3375,7 +3375,7 @@ export const enviarReporteEspecie = async (req, res) => {
                 titulo = ?,
                 id_lote_envio = ?,
                 estado_revision = ?,
-                fecha_envio = UTC_TIMESTAMP(),
+                fecha_envio = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR),
                 fecha_revision = NULL,
                 id_administrador_revision = NULL,
                 motivo_rechazo = NULL
@@ -3875,7 +3875,7 @@ const revisarLoteReporte = async (req, res, aprobado) => {
             ? `
                 UPDATE reportes
                 SET estado_revision = ?,
-                    fecha_revision = UTC_TIMESTAMP(),
+                    fecha_revision = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR),
                     id_administrador_revision = ?,
                     motivo_rechazo = NULL
                 WHERE id_lote_envio = ?
@@ -3884,7 +3884,7 @@ const revisarLoteReporte = async (req, res, aprobado) => {
             : `
                 UPDATE reportes
                 SET estado_revision = ?,
-                    fecha_revision = UTC_TIMESTAMP(),
+                    fecha_revision = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR),
                     id_administrador_revision = ?,
                     motivo_rechazo = ?,
                     id_tipo_reporte = NULL,
@@ -4062,7 +4062,7 @@ export const getReportesAdministradorHoy = async (req, res) => {
       AND rep.fecha_generacion<DATE_ADD(?,INTERVAL 1 DAY)
      )
      OR rep.estado_revision='PENDIENTE'
-     OR DATE(CONVERT_TZ(rep.fecha_revision,'+00:00','-05:00'))=?
+     OR DATE(rep.fecha_revision)=?
     )
 
    ORDER BY rep.fecha_generacion DESC
