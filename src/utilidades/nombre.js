@@ -19,6 +19,38 @@ const palabrasProhibidas = new Set([
 const frasesProhibidas = new Set(['sin nombre']);
 const nombresBrevesReconocidos = new Set(['ng']);
 const letrasNombre = /^[\p{L}]+(?:[ '-][\p{L}]+)*$/u;
+const posicionesTeclado = new Map([
+    ...'qwertyuiop'.split('').map((letra, indice) => [letra, [0, indice]]),
+    ...'asdfghjkl'.split('').map((letra, indice) => [letra, [1, indice + 0.5]]),
+    ...'zxcvbnm'.split('').map((letra, indice) => [letra, [2, indice + 1]])
+]);
+
+function pareceRecorridoDeTeclado(texto) {
+    for (let inicio = 0; inicio <= texto.length - 5; inicio++) {
+        let recorridoContinuo = true;
+
+        for (let indice = inicio + 1; indice < inicio + 5; indice++) {
+            const anterior = posicionesTeclado.get(texto[indice - 1]);
+            const actual = posicionesTeclado.get(texto[indice]);
+
+            if (!anterior || !actual) {
+                recorridoContinuo = false;
+                break;
+            }
+
+            const filas = Math.abs(anterior[0] - actual[0]);
+            const columnas = Math.abs(anterior[1] - actual[1]);
+            if (filas > 1 || columnas > 1.5 || (filas === 0 && columnas > 1)) {
+                recorridoContinuo = false;
+                break;
+            }
+        }
+
+        if (recorridoContinuo) return true;
+    }
+
+    return false;
+}
 
 export function esNombreValido(texto) {
     const limpio = String(texto || '').trim().replace(/\s+/g, ' ');
@@ -56,6 +88,10 @@ export function esNombreValido(texto) {
             continue;
         }
 
+        if (/^[a-z]+$/.test(normalizada) && pareceRecorridoDeTeclado(normalizada)) {
+            return false;
+        }
+
         if (/[^\p{Script=Latin}\p{M}]/u.test(normalizada)) {
             continue;
         }
@@ -66,7 +102,8 @@ export function esNombreValido(texto) {
             /[bcdfghjklmnpqrstvwxyz]{3,}/i.test(normalizada) ||
             /[aeiou]{3,}/i.test(normalizada) ||
             /^(.)(.)\1\2(?:\1)?$/i.test(normalizada) ||
-            /(.)\1{2,}/i.test(normalizada)
+            /(.)\1{2,}/i.test(normalizada) ||
+            /(.{2,})\1{2,}/i.test(normalizada)
         ) {
             return false;
         }

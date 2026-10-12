@@ -27,6 +27,13 @@ test('rejects common placeholder, bot, and random-looking names', () => {
     assert.equal(esNombreValido('TestUser'), false);
 });
 
+test('rejects keyboard walks and repeated artificial syllables', () => {
+    assert.equal(esNombreValido('QwErTy'), false);
+    assert.equal(esNombreValido('Qazwsx'), false);
+    assert.equal(esNombreValido('Lalalala'), false);
+    assert.equal(esNombreValido('Aaaaa'), false);
+});
+
 test('accepts valid names with less common international spelling patterns', () => {
     assert.equal(esNombreValido('Xochitl'), true);
     assert.equal(esNombreValido('Ng'), true);
