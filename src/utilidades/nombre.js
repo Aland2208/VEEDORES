@@ -19,6 +19,10 @@ const palabrasProhibidas = new Set([
 const frasesProhibidas = new Set(['sin nombre']);
 const nombresBrevesReconocidos = new Set(['ng']);
 const letrasNombre = /^[\p{L}]+(?:[ '-][\p{L}]+)*$/u;
+const patronesArtificiales = new Set([
+    'fefwe', 'fewef', 'fefwef', 'fewefe', 'jfdskl', 'asdfgh', 'zxcvbn',
+    'qazwsx', 'wsxedc', 'edcrfv', 'rfvtgb', 'tgbyhn', 'yhnujm', 'ujmikl'
+]);
 const posicionesTeclado = new Map([
     ...'qwertyuiop'.split('').map((letra, indice) => [letra, [0, indice]]),
     ...'asdfghjkl'.split('').map((letra, indice) => [letra, [1, indice + 0.5]]),
@@ -84,6 +88,10 @@ export function esNombreValido(texto) {
             return false;
         }
 
+        if (patronesArtificiales.has(normalizada)) {
+            return false;
+        }
+
         if (nombresBrevesReconocidos.has(normalizada)) {
             continue;
         }
@@ -103,7 +111,8 @@ export function esNombreValido(texto) {
             /[aeiou]{3,}/i.test(normalizada) ||
             /^(.)(.)\1\2(?:\1)?$/i.test(normalizada) ||
             /(.)\1{2,}/i.test(normalizada) ||
-            /(.{2,})\1{2,}/i.test(normalizada)
+            /(.{2,})\1{2,}/i.test(normalizada) ||
+            /([bcdfghjklmnpqrstvwxyz])[aeiou]\1[bcdfghjklmnpqrstvwxyz]/i.test(normalizada)
         ) {
             return false;
         }

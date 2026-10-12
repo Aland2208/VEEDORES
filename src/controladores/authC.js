@@ -21,6 +21,14 @@ import {
 const MAX_INTENTOS = 3;
 const TIEMPO_BLOQUEO = 15 * 60 * 1000;
 const intentosLogin = new Map();
+const RESPUESTA_REGISTRO_PUBLICA = Object.freeze({
+    estado: 1,
+    mensaje: "Si el correo puede registrarse, recibirás instrucciones para continuar."
+});
+
+function responderRegistroPublico(res) {
+    return res.status(202).json(RESPUESTA_REGISTRO_PUBLICA);
+}
 
 // ==========================================
 // VALIDACIÓN ESTRICTA DE CORREO (BACKEND)
@@ -85,10 +93,10 @@ export const registrarUsuario = async (req, res) => {
         }
 
         if (!servicioVerificacionCorreoConfigurado()) {
-            
+            console.error('El servicio de verificación de correo no está configurado.');
             return res.status(503).json({
                 estado: 0,
-                mensaje: "No se puede enviar el correo de verificación en este momento."
+                mensaje: "El registro está temporalmente no disponible."
             });
         }
 
@@ -116,10 +124,7 @@ export const registrarUsuario = async (req, res) => {
 
         if (usuariosExistentes.length > 0) {
             await conexion.rollback();
-            return res.status(409).json({
-                estado: 0,
-                mensaje: "El correo ya está registrado."
-            });
+            return responderRegistroPublico(res);
         }
 
         await conexion.query(`
@@ -139,10 +144,7 @@ export const registrarUsuario = async (req, res) => {
 
         if (solicitudesExistentes.length > 0) {
             await conexion.rollback();
-            return res.status(409).json({
-                estado: 0,
-                mensaje: "Ya hay una solicitud pendiente para este correo. Revisa tu bandeja de entrada."
-            });
+            return responderRegistroPublico(res);
         }
 
         await conexion.query(`
@@ -164,31 +166,23 @@ export const registrarUsuario = async (req, res) => {
             await enviarCorreoVerificacion(correo, token);
         } catch (error) {
             await conexion.rollback();
-            
-            return res.status(502).json({
-                estado: 0,
-                mensaje: "No se pudo enviar el correo de verificación. Intenta nuevamente."
+            console.error('Falló el envío del correo de verificación.', {
+                tipo: error instanceof Error ? error.name : 'Error desconocido'
             });
+            return responderRegistroPublico(res);
         }
 
         await conexion.commit();
 
-        return res.status(201).json({
-            estado: 1,
-            mensaje: "Solicitud recibida. La cuenta se creará cuando confirmes el correo."
-        });
+        return responderRegistroPublico(res);
 
     } catch (error) {
         if (conexion) await conexion.rollback();
 
         if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "El correo ya está registrado."
-            });
+            return responderRegistroPublico(res);
         }
 
-        
         return res.status(500).json({
             estado: 0,
             mensaje: "Error del servidor al registrar."

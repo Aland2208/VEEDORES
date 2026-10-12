@@ -111,7 +111,11 @@ test('creates the account only after the email verification request succeeds', a
             }
         }, registrationResponse);
 
-        assert.equal(registrationResponse.statusCode, 201);
+        assert.equal(registrationResponse.statusCode, 202);
+        assert.deepEqual(registrationResponse.body, {
+            estado: 1,
+            mensaje: 'Si el correo puede registrarse, recibirás instrucciones para continuar.'
+        });
         assert.equal(userInsertions, 0);
         assert.ok(pendingRequest);
         assert.notEqual(pendingRequest.password_hash, 'StrongPass1!');
@@ -164,6 +168,112 @@ test('creates the account only after the email verification request succeeds', a
             delete process.env.JWT_SECRET;
         } else {
             process.env.JWT_SECRET = jwtSecretOriginal;
+        }
+    }
+});
+
+test('does not reveal account, pending-request, duplicate-race, or mail-delivery state', async t => {
+    const previousApiKey = process.env.API_BREVO;
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    const previousFetch = globalThis.fetch;
+    const escenarios = [
+        { nombre: 'correo existente', estado: 'existente' },
+        { nombre: 'solicitud pendiente', estado: 'pendiente' },
+        { nombre: 'envío correcto', estado: 'nuevo' },
+        { nombre: 'fallo de entrega', estado: 'fallo-correo' },
+        { nombre: 'duplicado concurrente', estado: 'duplicado' }
+    ];
+    let escenarioActual = 'nuevo';
+
+    process.env.API_BREVO = 'test-api-key';
+    process.env.FRONTEND_URL = 'https://example.com';
+    globalThis.fetch = async () => ({
+        ok: escenarioActual !== 'fallo-correo',
+        text: async () => ''
+    });
+    t.mock.method(console, 'error', () => {});
+    t.mock.method(conmysql, 'getConnection', async () => ({
+        beginTransaction: async () => {},
+        commit: async () => {},
+        rollback: async () => {},
+        release: () => {},
+        query: async sql => {
+            if (sql.includes('FROM usuarios') && escenarioActual === 'existente') {
+                return [[{ id_usuario: 1 }], []];
+            }
+            if (sql.includes('SELECT id_solicitud') &&
+                sql.includes('FROM solicitudes_registro') &&
+                escenarioActual === 'pendiente') {
+                return [[{ id_solicitud: 1 }], []];
+            }
+            if (sql.includes('INSERT INTO solicitudes_registro') &&
+                escenarioActual === 'duplicado') {
+                const error = new Error('duplicate email');
+                error.code = 'ER_DUP_ENTRY';
+                throw error;
+            }
+            return [{ affectedRows: 1, insertId: 1 }, []];
+        }
+    }));
+
+    const respuestas = [];
+    try {
+        for (const escenario of escenarios) {
+            escenarioActual = escenario.estado;
+            const response = {
+                statusCode: 200,
+                body: null,
+                status(code) {
+                    this.statusCode = code;
+                    return this;
+                },
+                json(body) {
+                    this.body = body;
+                    return this;
+                }
+            };
+
+            await registrarUsuario({
+                body: {
+                    nombre: 'Maria',
+                    apellido: 'Vargas',
+                    correo: `${escenario.estado}@example.com`,
+                    password: 'StrongPass1!',
+                    id_rol: 2
+                }
+            }, response);
+            respuestas.push({
+                nombre: escenario.nombre,
+                statusCode: response.statusCode,
+                body: response.body
+            });
+        }
+
+        const respuestaEsperada = {
+            statusCode: 202,
+            body: {
+                estado: 1,
+                mensaje: 'Si el correo puede registrarse, recibirás instrucciones para continuar.'
+            }
+        };
+        for (const respuesta of respuestas) {
+            assert.deepEqual(
+                { statusCode: respuesta.statusCode, body: respuesta.body },
+                respuestaEsperada,
+                `La respuesta pública varió para el escenario: ${respuesta.nombre}`
+            );
+        }
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousApiKey === undefined) {
+            delete process.env.API_BREVO;
+        } else {
+            process.env.API_BREVO = previousApiKey;
+        }
+        if (previousFrontendUrl === undefined) {
+            delete process.env.FRONTEND_URL;
+        } else {
+            process.env.FRONTEND_URL = previousFrontendUrl;
         }
     }
 });
