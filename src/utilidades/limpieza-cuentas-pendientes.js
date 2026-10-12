@@ -1,7 +1,7 @@
 import { conmysql } from '../db.js';
 
 const TAMANO_LOTE = 200;
-const INTERVALO_LIMPIEZA_MS = 5 * 60 * 1000;
+const INTERVALO_LIMPIEZA_MS = 60 * 1000;
 
 export async function limpiarCuentasPendientesVencidas() {
     const conexion = await conmysql.getConnection();
