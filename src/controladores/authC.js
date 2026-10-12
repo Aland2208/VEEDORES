@@ -124,14 +124,14 @@ export const registrarUsuario = async (req, res) => {
         await conexion.query(`
             DELETE FROM solicitudes_registro
             WHERE correo = ?
-              AND expira <= NOW()
+              AND expira <= UTC_TIMESTAMP()
         `, [correo]);
 
         const [solicitudesExistentes] = await conexion.query(`
             SELECT id_solicitud
             FROM solicitudes_registro
             WHERE correo = ?
-              AND expira > NOW()
+              AND expira > UTC_TIMESTAMP()
             LIMIT 1
             FOR UPDATE
         `, [correo]);
@@ -147,8 +147,8 @@ export const registrarUsuario = async (req, res) => {
         await conexion.query(`
             INSERT INTO solicitudes_registro
                 (nombre, apellido, correo, password_hash, id_rol,
-                 id_administrador, token_hash, expira)
-            VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
+                 id_administrador, token_hash, expira, fecha_creacion)
+            VALUES (?, ?, ?, ?, ?, NULL, ?, ?, UTC_TIMESTAMP())
         `, [
             nombreFormateado,
             apellidoFormateado,
@@ -156,7 +156,7 @@ export const registrarUsuario = async (req, res) => {
             hash,
             Number(id_rol),
             tokenHash,
-            expira
+            expira.toISOString().slice(0, 19).replace('T', ' ')
         ]);
 
         try {
@@ -224,7 +224,7 @@ export const verificarCorreo = async (req, res) => {
                 id_administrador
             FROM solicitudes_registro
             WHERE token_hash = ?
-              AND expira > NOW()
+              AND expira > UTC_TIMESTAMP()
             LIMIT 1
             FOR UPDATE
         `, [tokenHash]);
@@ -235,7 +235,7 @@ export const verificarCorreo = async (req, res) => {
                 FROM usuarios
                 WHERE token_verificacion_correo = ?
                   AND estado = 0
-                  AND verificacion_correo_expira > NOW()
+                  AND verificacion_correo_expira > UTC_TIMESTAMP()
                 LIMIT 1
                 FOR UPDATE
             `, [tokenHash]);

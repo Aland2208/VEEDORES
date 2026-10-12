@@ -47,7 +47,7 @@ export const getObservadores=async(req,res)=>{
                AND admin.estado = 1
             WHERE s.id_administrador = ?
               AND s.id_rol = 2
-              AND s.expira > NOW()
+              AND s.expira > UTC_TIMESTAMP()
             ORDER BY s.fecha_creacion DESC
         `,[idAdministrador]);
 
@@ -159,14 +159,14 @@ export const crearObservador=async(req,res)=>{
         await conexion.query(`
             DELETE FROM solicitudes_registro
             WHERE correo = ?
-              AND expira <= NOW()
+              AND expira <= UTC_TIMESTAMP()
         `,[correo]);
 
         const [solicitudExistente]=await conexion.query(`
             SELECT id_solicitud
             FROM solicitudes_registro
             WHERE correo = ?
-              AND expira > NOW()
+              AND expira > UTC_TIMESTAMP()
             LIMIT 1
             FOR UPDATE
         `,[correo]);
@@ -188,10 +188,19 @@ export const crearObservador=async(req,res)=>{
                 id_rol,
                 id_administrador,
                 token_hash,
-                expira
+                expira,
+                fecha_creacion
             )
-            VALUES(?, ?, ?, ?, 2, ?, ?, ?)
-        `,[nombre,apellido,correo,passwordHash,tokenHash,expira]);
+            VALUES(?, ?, ?, ?, 2, ?, ?, ?, UTC_TIMESTAMP())
+        `,[
+            nombre,
+            apellido,
+            correo,
+            passwordHash,
+            idAdministrador,
+            tokenHash,
+            expira.toISOString().slice(0,19).replace('T',' ')
+        ]);
         
 
         try{
