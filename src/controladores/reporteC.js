@@ -200,7 +200,7 @@ export const getReporteCapturas = async (req, res) => {
 
     catch (error) {
 
-        
+
 
 
         res.status(500).json({
@@ -465,7 +465,7 @@ export const getReportePorFechas = async (req, res) => {
 
     catch (error) {
 
-        
+
 
 
         res.status(500).json({
@@ -576,7 +576,7 @@ export const getResumenEspecies = async (req, res) => {
 
     catch (error) {
 
-        
+
 
 
         res.status(500).json({
@@ -633,7 +633,7 @@ export const getTiposReporte = async (req, res) => {
 
     catch (error) {
 
-        
+
 
 
         res.status(500).json({
@@ -679,11 +679,11 @@ export const getReportesPendientesHoy = async (req, res) => {
         }
 
 
-        
 
-        
 
-        
+
+
+
 
 
         // ==============================================
@@ -966,13 +966,13 @@ export const getReportesPendientesHoy = async (req, res) => {
         // RESPUESTA
         // ==============================================
 
-        
 
-        
 
-        
 
-        
+
+
+
+
 
 
         return res.status(200).json({
@@ -1011,7 +1011,7 @@ export const getReportesPendientesHoy = async (req, res) => {
 
     catch (error) {
 
-        
+
 
 
         return res.status(500).json({
@@ -2241,7 +2241,7 @@ const crearPDFBuffer = async ({
 
                         catch (error) {
 
-                            
+
 
 
                             doc
@@ -2544,7 +2544,7 @@ export const generarPDFReporteAdmin = async (req, res) => {
         return res.status(200).send(pdfBuffer);
 
     } catch (error) {
-        
+
 
         return res.status(500).json({
             estado: 0,
@@ -2567,9 +2567,9 @@ export const generarPDFEspecie = async (
 
     try {
 
-        
 
-        
+
+
 
 
         // ==============================================
@@ -2591,11 +2591,11 @@ export const generarPDFEspecie = async (
         } = req.body;
 
 
-        
 
-        
 
-        
+
+
+
 
 
         // ==============================================
@@ -2662,7 +2662,7 @@ export const generarPDFEspecie = async (
             );
 
 
-        
+
 
 
         // ==============================================
@@ -2692,7 +2692,7 @@ export const generarPDFEspecie = async (
         }
 
 
-        
+
 
 
         // ==============================================
@@ -2724,7 +2724,7 @@ export const generarPDFEspecie = async (
         );
 
 
-        
+
 
 
         // ==============================================
@@ -2777,9 +2777,9 @@ export const generarPDFEspecie = async (
         );
 
 
-        
 
-        
+
+
 
 
         return res
@@ -2790,7 +2790,7 @@ export const generarPDFEspecie = async (
 
     catch (error) {
 
-        
+
 
 
         // IMPORTANTE:
@@ -2855,9 +2855,9 @@ export const generarCSVEspecie = async (
 
     try {
 
-        
 
-        
+
+
 
 
         // ==============================================
@@ -3070,7 +3070,7 @@ export const generarCSVEspecie = async (
         );
 
 
-        
+
 
 
         // ==============================================
@@ -3123,9 +3123,9 @@ export const generarCSVEspecie = async (
         );
 
 
-        
 
-        
+
+
 
 
         return res
@@ -3136,7 +3136,7 @@ export const generarCSVEspecie = async (
 
     catch (error) {
 
-        
+
 
 
         if (!res.headersSent) {
@@ -3182,11 +3182,11 @@ export const enviarReporteEspecie = async (req, res) => {
     try {
         const { id_usuario, id_especie, ids_reportes, id_tipo_reporte, titulo } = req.body;
 
-        
-        
-        
-        
-        
+
+
+
+
+
 
         // Validaciones básicas
         const idUsuario = Number(id_usuario);
@@ -3345,11 +3345,11 @@ export const enviarReporteEspecie = async (req, res) => {
 
         await conexion.commit();
 
-        
-        
-        
-        
-        
+
+
+
+
+
 
         return res.status(200).json({
             estado: 1,
@@ -3374,7 +3374,7 @@ export const enviarReporteEspecie = async (req, res) => {
             try { await conexion.rollback(); } catch { }
         }
 
-        
+
 
         return res.status(500).json({
             estado: 0,
@@ -3389,6 +3389,7 @@ export const enviarReporteEspecie = async (req, res) => {
 // ======================================================
 // HISTORIAL DE REPORTES CON FILTROS Y PAGINACIÓN
 // ======================================================
+
 
 export const getHistorialReportes = async (req, res) => {
     try {
@@ -3406,15 +3407,11 @@ export const getHistorialReportes = async (req, res) => {
 
         const idUsuario = Number(id_usuario);
         const paginaActual = Math.max(Number(pagina) || 1, 1);
-        const limitePagina = Math.min(Math.max(Number(limite) || 10, 1), 50);
+        const limitePagina = Math.min(
+            Math.max(Number(limite) || 10, 1),
+            50
+        );
         const offset = (paginaActual - 1) * limitePagina;
-
-        if (String(busqueda || '').length > 150) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "La búsqueda no es válida."
-            });
-        }
 
         if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
             return res.status(400).json({
@@ -3423,13 +3420,19 @@ export const getHistorialReportes = async (req, res) => {
             });
         }
 
-        
-        
-        
-        
-        
+        if (String(busqueda || "").length > 150) {
+            return res.status(400).json({
+                estado: 0,
+                mensaje: "La búsqueda no es válida"
+            });
+        }
 
-        // Condiciones dinámicas
+        console.log("[REPORTES /historial] Consultando:", {
+            idUsuario,
+            paginaActual,
+            limitePagina
+        });
+
         const condiciones = [
             "rep.id_usuario = ?",
             "rep.id_tipo_reporte IS NOT NULL",
@@ -3442,12 +3445,14 @@ export const getHistorialReportes = async (req, res) => {
         const parametros = [idUsuario];
 
         if (fecha_inicio) {
-            condiciones.push("DATE(rep.fecha_generacion) >= ?");
-            parametros.push(fecha_inicio);
+            condiciones.push("rep.fecha_generacion >= ?");
+            parametros.push(`${fecha_inicio} 00:00:00`);
         }
 
         if (fecha_fin) {
-            condiciones.push("DATE(rep.fecha_generacion) <= ?");
+            condiciones.push(
+                "rep.fecha_generacion < DATE_ADD(?, INTERVAL 1 DAY)"
+            );
             parametros.push(fecha_fin);
         }
 
@@ -3466,18 +3471,18 @@ export const getHistorialReportes = async (req, res) => {
             parametros.push(Number(id_tipo_reporte));
         }
 
-        if (busqueda?.trim()) {
+        if (String(busqueda || "").trim()) {
             condiciones.push("rep.titulo LIKE ?");
-            parametros.push(`%${busqueda.trim()}%`);
+            parametros.push(`%${String(busqueda).trim()}%`);
         }
 
         const where = condiciones.join(" AND ");
 
-        // ==================================================
-        // CONTAR REPORTES AGRUPADOS
-        // ==================================================
+        // ==============================================
+        // CONTAR GRUPOS DE REPORTES
+        // ==============================================
 
-        const [conteo] = await conmysql.query(`
+        const sqlConteo = `
             SELECT COUNT(*) AS total
             FROM (
                 SELECT
@@ -3487,8 +3492,10 @@ export const getHistorialReportes = async (req, res) => {
                     rep.titulo,
                     DATE(rep.fecha_generacion) AS fecha
                 FROM reportes rep
-                INNER JOIN capturas c ON rep.id_captura = c.id_captura
-                INNER JOIN detecciones d ON c.id_deteccion = d.id_deteccion
+                INNER JOIN capturas c
+                    ON rep.id_captura = c.id_captura
+                INNER JOIN detecciones d
+                    ON c.id_deteccion = d.id_deteccion
                 WHERE ${where}
                 GROUP BY
                     rep.id_usuario,
@@ -3497,16 +3504,24 @@ export const getHistorialReportes = async (req, res) => {
                     rep.titulo,
                     DATE(rep.fecha_generacion)
             ) AS grupos
-        `, parametros);
+        `;
+
+        const [conteo] = await conmysql.query(
+            {
+                sql: sqlConteo,
+                timeout: 15000
+            },
+            parametros
+        );
 
         const total = Number(conteo[0]?.total || 0);
         const totalPaginas = Math.ceil(total / limitePagina);
 
-        // ==================================================
-        // OBTENER SOLO LOS GRUPOS DE LA PÁGINA SOLICITADA
-        // ==================================================
+        // ==============================================
+        // OBTENER REPORTES PAGINADOS
+        // ==============================================
 
-        const [grupos] = await conmysql.query(`
+        const sqlGrupos = `
             SELECT
                 MIN(rep.id_reporte) AS id_reporte_grupo,
                 rep.id_usuario,
@@ -3516,7 +3531,10 @@ export const getHistorialReportes = async (req, res) => {
                 rep.id_tipo_reporte,
                 tr.nombre_tipo,
                 rep.titulo,
-                DATE(rep.fecha_generacion) AS fecha,
+                DATE_FORMAT(
+                    rep.fecha_generacion,
+                    '%Y-%m-%d'
+                ) AS fecha,
                 MAX(rep.fecha_generacion) AS fecha_generacion,
                 COUNT(*) AS total_capturas,
                 COALESCE(SUM(c.peso), 0) AS peso_total,
@@ -3524,12 +3542,16 @@ export const getHistorialReportes = async (req, res) => {
                 u.nombre,
                 u.apellido
             FROM reportes rep
-            INNER JOIN capturas c ON rep.id_captura = c.id_captura
-            INNER JOIN detecciones d ON c.id_deteccion = d.id_deteccion
-            INNER JOIN especies e ON d.id_especie = e.id_especie
+            INNER JOIN capturas c
+                ON rep.id_captura = c.id_captura
+            INNER JOIN detecciones d
+                ON c.id_deteccion = d.id_deteccion
+            INNER JOIN especies e
+                ON d.id_especie = e.id_especie
             INNER JOIN tipos_reporte tr
                 ON rep.id_tipo_reporte = tr.id_tipo_reporte
-            INNER JOIN usuarios u ON rep.id_usuario = u.id_usuario
+            INNER JOIN usuarios u
+                ON rep.id_usuario = u.id_usuario
             WHERE ${where}
             GROUP BY
                 rep.id_usuario,
@@ -3544,11 +3566,20 @@ export const getHistorialReportes = async (req, res) => {
                 u.apellido
             ORDER BY fecha_generacion DESC
             LIMIT ? OFFSET ?
-        `, [...parametros, limitePagina, offset]);
+        `;
 
-        
-        
-        
+        const [grupos] = await conmysql.query(
+            {
+                sql: sqlGrupos,
+                timeout: 15000
+            },
+            [...parametros, limitePagina, offset]
+        );
+
+        console.log("[REPORTES /historial] Resultado:", {
+            total,
+            grupos: grupos.length
+        });
 
         return res.status(200).json({
             estado: 1,
@@ -3565,7 +3596,12 @@ export const getHistorialReportes = async (req, res) => {
         });
 
     } catch (error) {
-        
+        console.error("[REPORTES /historial] ERROR:", {
+            mensaje: error.message,
+            codigo: error.code,
+            sqlState: error.sqlState,
+            sqlMessage: error.sqlMessage
+        });
 
         return res.status(500).json({
             estado: 0,
@@ -3573,6 +3609,7 @@ export const getHistorialReportes = async (req, res) => {
         });
     }
 };
+
 
 export const getEspeciesFiltro = async (req, res) => {
     try {
@@ -3588,7 +3625,7 @@ export const getEspeciesFiltro = async (req, res) => {
         });
 
     } catch (error) {
-        
+
 
         return res.status(500).json({
             estado: 0,
@@ -3740,7 +3777,7 @@ export const getDetalleReporte = async (req, res) => {
         });
 
     } catch (error) {
-        
+
 
         return res.status(500).json({
             estado: 0,
@@ -4041,7 +4078,7 @@ export const getReportesAdministradorHoy = async (req, res) => {
         });
 
     } catch (error) {
-        
+
         return res.status(500).json({
             estado: 0,
             mensaje: "Error al obtener los reportes del administrador",
@@ -4133,7 +4170,7 @@ export const editarTituloReporteAdmin = async (req, res) => {
         });
 
     } catch (error) {
-        
+
         return res.status(500).json({
             estado: 0,
             mensaje: "Error al actualizar el título del reporte",
@@ -4250,7 +4287,7 @@ export const editarReporteAdmin = async (req, res) => {
         });
 
     } catch (error) {
-        
+
         return res.status(500).json({
             estado: 0,
             mensaje: "Error al actualizar el reporte",
@@ -4436,7 +4473,7 @@ export const generarCSVReporteAdmin = async (req, res) => {
         return res.status(200).send(csv);
 
     } catch (error) {
-        
+
 
         return res.status(500).json({
             estado: 0,
