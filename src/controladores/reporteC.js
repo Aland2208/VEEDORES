@@ -3427,12 +3427,6 @@ export const getHistorialReportes = async (req, res) => {
             });
         }
 
-        console.log("[REPORTES /historial] Consultando:", {
-            idUsuario,
-            paginaActual,
-            limitePagina
-        });
-
         const condiciones = [
             "rep.id_usuario = ?",
             "rep.id_tipo_reporte IS NOT NULL",
@@ -3576,11 +3570,6 @@ export const getHistorialReportes = async (req, res) => {
             [...parametros, limitePagina, offset]
         );
 
-        console.log("[REPORTES /historial] Resultado:", {
-            total,
-            grupos: grupos.length
-        });
-
         return res.status(200).json({
             estado: 1,
             mensaje: "Historial obtenido correctamente",
@@ -3596,12 +3585,6 @@ export const getHistorialReportes = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("[REPORTES /historial] ERROR:", {
-            mensaje: error.message,
-            codigo: error.code,
-            sqlState: error.sqlState,
-            sqlMessage: error.sqlMessage
-        });
 
         return res.status(500).json({
             estado: 0,
