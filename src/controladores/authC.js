@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { conmysql } from "../db.js";
 import {
     esCorreoValido,
+    validarCorreoSeguro,
     passwordValida,
     PASSWORD_MAX_BYTES
 } from "../utilidades/correo.js";
@@ -38,155 +39,102 @@ function responderRegistroPublico(res) {
 // ==========================================
 export const registrarUsuario = async (req, res) => {
     let conexion;
-
     try {
-        let { nombre, apellido, correo, password, id_rol } = req.body;
-
+        let { nombre, apellido, correo, password, id_rol } = req.body || {};
         nombre = String(nombre || '').trim().replace(/\s+/g, ' ');
         apellido = String(apellido || '').trim().replace(/\s+/g, ' ');
         correo = String(correo || '').trim().toLowerCase();
 
-        // 1. Validar campos obligatorios
-        if (!nombre || !apellido || !correo || typeof password !== 'string') {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "Todos los campos son obligatorios."
-            });
+        if (!nombre || !apellido || !correo || typeof password !== 'string' || !password) {
+            return res.status(400).json({ estado: 0, mensaje: 'Todos los campos son obligatorios.' });
         }
-
-        // 2. Validar que el nombre sea auténtico
+        if (nombre.length > 30 || apellido.length > 30 || correo.length > 150) {
+            return res.status(400).json({ estado: 0, mensaje: 'Uno o más campos exceden el tamaño permitido.' });
+        }
         if (!esNombreValido(nombre)) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "El nombre no es válido. Escriba un nombre real y formal."
-            });
+            return res.status(400).json({ estado: 0, mensaje: 'El nombre no es válido. Escriba un nombre real y formal.' });
         }
-
-        // 3. Validar que el apellido sea auténtico
         if (!esNombreValido(apellido)) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "El apellido no es válido. Escriba un apellido real y formal."
-            });
+            return res.status(400).json({ estado: 0, mensaje: 'El apellido no es válido. Escriba un apellido real y formal.' });
         }
 
-        // 4. Validar formato y dominio de correo
-        if (!esCorreoValido(correo)) {
+        const validacionCorreo = await validarCorreoSeguro(correo);
+        if (!validacionCorreo.valido) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "El correo electrónico no es válido. Use un proveedor reconocido (Gmail, Outlook, Hotmail, etc.)."
+                codigo: validacionCorreo.codigo,
+                mensaje: validacionCorreo.mensaje
             });
         }
-
         if (!passwordValida(password)) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "La contraseña no cumple los requisitos de seguridad."
-            });
+            return res.status(400).json({ estado: 0, mensaje: 'La contraseña no cumple los requisitos de seguridad.' });
         }
-
-        if (![1, 2].includes(Number(id_rol))) {
-            return res.status(400).json({
-                estado: 0,
-                mensaje: "El tipo de cuenta no es válido."
-            });
+        const rol = Number(id_rol);
+        if (![1, 2].includes(rol)) {
+            return res.status(400).json({ estado: 0, mensaje: 'El tipo de cuenta no es válido.' });
         }
-
         if (!servicioVerificacionCorreoConfigurado()) {
             console.error('El servicio de verificación de correo no está configurado.');
-            return res.status(503).json({
-                estado: 0,
-                mensaje: "El registro está temporalmente no disponible."
-            });
+            return res.status(503).json({ estado: 0, mensaje: 'El registro está temporalmente no disponible.' });
         }
 
-        // Normalizar capitalización
-        const formatearPalabra = (str) =>
-            str.split(' ').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
-
+        const formatearPalabra = texto => texto.split(' ').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
         const nombreFormateado = formatearPalabra(nombre);
         const apellidoFormateado = formatearPalabra(apellido);
-        const salt = await bcrypt.genSalt(10);
-        const hash = await bcrypt.hash(password, salt);
+        const hash = await bcrypt.hash(password, 10);
         const { token, tokenHash, expira } = crearTokenVerificacionCorreo();
 
         conexion = await conmysql.getConnection();
         await conexion.beginTransaction();
 
         const [usuariosExistentes] = await conexion.query(
-            `SELECT id_usuario
-             FROM usuarios
-             WHERE correo=?
-             LIMIT 1
-             FOR UPDATE`,
+            'SELECT id_usuario FROM usuarios WHERE correo=? LIMIT 1 FOR UPDATE', [correo]
+        );
+        if (usuariosExistentes.length) {
+            await conexion.rollback();
+            return responderRegistroPublico(res);
+        }
+
+        await conexion.query(
+            'DELETE FROM solicitudes_registro WHERE correo=? AND expira<=DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)',
             [correo]
         );
 
-        if (usuariosExistentes.length > 0) {
+        const [solicitudesExistentes] = await conexion.query(
+            `SELECT id_solicitud FROM solicitudes_registro
+             WHERE correo=? AND expira>DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)
+             LIMIT 1 FOR UPDATE`,
+            [correo]
+        );
+        if (solicitudesExistentes.length) {
             await conexion.rollback();
             return responderRegistroPublico(res);
         }
 
-        await conexion.query(`
-            DELETE FROM solicitudes_registro
-            WHERE correo = ?
-              AND expira <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)
-        `, [correo]);
-
-        const [solicitudesExistentes] = await conexion.query(`
-            SELECT id_solicitud
-            FROM solicitudes_registro
-            WHERE correo = ?
-              AND expira > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR)
-            LIMIT 1
-            FOR UPDATE
-        `, [correo]);
-
-        if (solicitudesExistentes.length > 0) {
-            await conexion.rollback();
-            return responderRegistroPublico(res);
-        }
-
-        await conexion.query(`
-            INSERT INTO solicitudes_registro
-                (nombre, apellido, correo, password_hash, id_rol,
-                 id_administrador, token_hash, expira, fecha_creacion)
-            VALUES (?, ?, ?, ?, ?, NULL, ?, ?, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR))
-        `, [
-            nombreFormateado,
-            apellidoFormateado,
-            correo,
-            hash,
-            Number(id_rol),
-            tokenHash,
-            fechaMysqlEcuador(expira)
-        ]);
+        await conexion.query(
+            `INSERT INTO solicitudes_registro
+             (nombre, apellido, correo, password_hash, id_rol, id_administrador, token_hash, expira, fecha_creacion)
+             VALUES (?, ?, ?, ?, ?, NULL, ?, ?, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 HOUR))`,
+            [nombreFormateado, apellidoFormateado, correo, hash, rol, tokenHash, fechaMysqlEcuador(expira)]
+        );
 
         try {
             await enviarCorreoVerificacion(correo, token);
         } catch (error) {
             await conexion.rollback();
-            console.error('Falló el envío del correo de verificación.', {
-                tipo: error instanceof Error ? error.name : 'Error desconocido'
-            });
+            console.error('Falló el envío del correo de verificación:', error instanceof Error ? error.name : 'Error desconocido');
             return responderRegistroPublico(res);
         }
 
         await conexion.commit();
-
         return responderRegistroPublico(res);
-
     } catch (error) {
-        if (conexion) await conexion.rollback();
-
-        if (error.code === 'ER_DUP_ENTRY') {
-            return responderRegistroPublico(res);
+        if (conexion) {
+            try { await conexion.rollback(); } catch { }
         }
-
-        return res.status(500).json({
-            estado: 0,
-            mensaje: "Error del servidor al registrar."
-        });
+        if (error?.code === 'ER_DUP_ENTRY') return responderRegistroPublico(res);
+        console.error('Error al registrar usuario:', error);
+        return res.status(500).json({ estado: 0, mensaje: 'Error del servidor al registrar.' });
     } finally {
         conexion?.release();
     }
@@ -478,7 +426,7 @@ export const loginUsuario = async (req, res) => {
         });
 
     } catch (error) {
-        
+
 
         return res.status(500).json({
             estado: 0,
@@ -634,7 +582,7 @@ export const solicitarRecuperacion = async (req, res) => {
 
         if (!respuestaBrevo.ok) {
             const errorData = await respuestaBrevo.json();
-            
+
 
             return res.status(500).json({
                 estado: 0,
@@ -644,7 +592,7 @@ export const solicitarRecuperacion = async (req, res) => {
 
         const data = await respuestaBrevo.json();
 
-        
+
 
         return res.status(200).json({
             estado: 1,
@@ -652,7 +600,7 @@ export const solicitarRecuperacion = async (req, res) => {
         });
 
     } catch (error) {
-        
+
 
         return res.status(500).json({
             estado: 0,
@@ -718,7 +666,7 @@ export const restablecerPassword = async (req, res) => {
         });
 
     } catch (error) {
-        
+
 
         res.status(500).json({
             estado: 0,
@@ -762,7 +710,7 @@ export const obtenerPerfil = async (req, res) => {
         });
 
     } catch (error) {
-        
+
 
         return res.status(500).json({
             estado: 0,
@@ -881,7 +829,7 @@ export const actualizarPerfil = async (req, res) => {
         });
 
     } catch (error) {
-        
+
 
         return res.status(500).json({
             estado: 0,
@@ -981,7 +929,7 @@ export const cambiarPassword = async (req, res) => {
         });
 
     } catch (error) {
-        
+
 
         return res.status(500).json({
             estado: 0,
@@ -1028,7 +976,7 @@ export const validarTokenRecuperacion = async (req, res) => {
         });
 
     } catch (error) {
-        
+
 
         return res.status(500).json({
             estado: 0,
