@@ -1,356 +1,383 @@
-import { conmysql } from '../db.js'
-import { getIO } from '../websocket/socket.js'
 
-// Prueba del controlador
+import { randomUUID } from 'node:crypto';
+import { conmysql } from '../db.js';
+import { getIO } from '../websocket/socket.js';
+
+// CONFIGURACION DE TARA REMOTA
+const DURACION_TARA = 60000;
+let ordenTaraPendiente = null;
+
+const fechaEcuador = () => new Date().toLocaleString('es-EC', {
+    timeZone: 'America/Guayaquil',
+    hour12: false
+});
+
+const verificarVencimientoTara = () => {
+    if (!ordenTaraPendiente) return;
+    if (Date.now() - ordenTaraPendiente.creada < DURACION_TARA) return;
+
+    const id = ordenTaraPendiente.id;
+    ordenTaraPendiente = null;
+
+    getIO()?.emit('taraError', {
+        id_orden: id,
+        mensaje: 'La solicitud de tara expiró sin confirmación del ESP32.'
+    });
+};
+
+// PROBAR CONTROLADOR
 export const pruebaBalanza = (req, res) => {
     res.send('Controlador de balanza funcionando correctamente');
-}
+};
 
-// Registrar peso enviado por ESP32
+// REGISTRAR PESO EN MYSQL
 export const registrarPeso = async (req, res) => {
-
     try {
         const { peso, id_usuario, id_deteccion } = req.body;
 
-        if (peso == null) {
-
+        if (peso == null || !Number.isFinite(Number(peso)) || Number(peso) < 0) {
             return res.status(400).json({
-                estado: 0,
-                mensaje: "Debe enviar el peso"
+                estado: 0, mensaje: 'Debe enviar un peso válido'
             });
-
         }
 
-        // Validación estricta para cumplir con id_deteccion NOT NULL
         if (id_deteccion == null) {
             return res.status(400).json({
                 estado: 0,
-                mensaje: "Debe enviar el id_deteccion de la especie clasificada"
+                mensaje: 'Debe enviar el id_deteccion de la especie clasificada'
             });
         }
 
         const usuario = id_usuario || 1;
 
-        // Guardar usando hora Ecuador
         const [result] = await conmysql.query(
-
             `INSERT INTO capturas
             (id_deteccion, id_usuario, peso, fecha_hora, estado)
-            VALUES
-            (
-                ?,
-                ?,
-                ?,
-                CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '-05:00'),
-                1
-            )`,
-            [
-                id_deteccion,
-                usuario,
-                peso
-            ]
+            VALUES (?, ?, ?, CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '-05:00'), 1)`,
+            [id_deteccion, usuario, Number(peso)]
         );
 
-        // Obtener la fecha exacta guardada
         const [registro] = await conmysql.query(
-            `SELECT
-                DATE_FORMAT(
-                    fecha_hora,
-                    '%Y-%m-%d %H:%i:%s'
-                ) AS fecha_hora
-             FROM capturas
-             WHERE id_captura = ?`,
+            `SELECT DATE_FORMAT(fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora
+             FROM capturas WHERE id_captura = ?`,
             [result.insertId]
         );
 
-        // Enviar por websocket
-        const io = getIO();
-        if (io) {
-
-            io.emit("nuevoPeso", {
-                id_captura: result.insertId,
-                id_deteccion: Number(id_deteccion),
-                peso: Number(peso),
-                fecha_hora: registro[0].fecha_hora
-            });
-        }
-
-        res.status(201).json({
-
-            estado: 1,
-            mensaje: "Peso registrado correctamente",
+        const datos = {
             id_captura: result.insertId,
             id_deteccion: Number(id_deteccion),
             peso: Number(peso),
             fecha_hora: registro[0].fecha_hora
-        });
+        };
 
+        getIO()?.emit('nuevoPeso', datos);
+
+        return res.status(201).json({
+            estado: 1,
+            mensaje: 'Peso registrado correctamente',
+            ...datos
+        });
     } catch (error) {
-        
-        res.status(500).json({
-            estado: 0,
-            mensaje: "Error del servidor"
+        console.error('Error registrando peso:', error);
+        return res.status(500).json({
+            estado: 0, mensaje: 'Error del servidor'
         });
     }
 };
 
-// =======================
-// PESO EN TIEMPO REAL
-// =======================
-
+// PESO EN TIEMPO REAL DESDE EL ESP32
 export const pesoLive = (req, res) => {
     try {
-        const { peso } = req.body;
-        if (peso == null) {
+        const peso = Number(req.body?.peso);
+
+        if (req.body?.peso == null || !Number.isFinite(peso) || peso < 0) {
             return res.status(400).json({
-                estado: 0,
-                mensaje: "Debe enviar el peso"
+                estado: 0, mensaje: 'Debe enviar un peso válido'
             });
         }
 
-        const io = getIO();
-        if (io) {
-            io.emit("pesoActual", {
-                peso: Number(peso),
-                fecha_hora: new Date().toLocaleString("es-EC", {
-                    timeZone: "America/Guayaquil",
-                    hour12: false
-                })
-            });
-        }
-
-        res.json({
-            estado: 1,
-            mensaje: "Peso enviado en tiempo real",
-            peso: Number(peso)
+        getIO()?.emit('pesoActual', {
+            peso,
+            fecha_hora: fechaEcuador()
         });
 
+        return res.json({
+            estado: 1,
+            mensaje: 'Peso enviado en tiempo real',
+            peso
+        });
     } catch (error) {
-        
-        res.status(500).json({
-            estado: 0,
-            mensaje: "Error servidor"
+        console.error('Error en pesoLive:', error);
+        return res.status(500).json({
+            estado: 0, mensaje: 'Error del servidor'
         });
     }
 };
 
-// Obtener todos los pesos registrados (con unión opcional a detecciones si lo requieres)
+// OBTENER TODOS LOS PESOS
 export const getPesos = async (req, res) => {
     try {
         const [result] = await conmysql.query(
-            `SELECT
-                c.id_captura,
-                c.id_deteccion,
-                c.peso,
-                DATE_FORMAT(
-                    c.fecha_hora,
-                    '%Y-%m-%d %H:%i:%s'
-                ) AS fecha_hora,
-                c.estado,
-                u.nombre,
-                u.apellido
-            FROM capturas c
-            INNER JOIN usuarios u
-                ON c.id_usuario = u.id_usuario
-            WHERE c.estado = 1
-            ORDER BY c.id_captura DESC`
+            `SELECT c.id_captura, c.id_deteccion, c.peso,
+                DATE_FORMAT(c.fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora,
+                c.estado, u.nombre, u.apellido
+             FROM capturas c
+             INNER JOIN usuarios u ON c.id_usuario = u.id_usuario
+             WHERE c.estado = 1
+             ORDER BY c.id_captura DESC`
         );
 
-        res.json({
+        return res.json({
             cantidad: result.length,
             data: result
         });
-
     } catch (error) {
-        
-        res.status(500).json({
-            estado: 0,
-            mensaje: "Error del servidor"
+        console.error('Error obteniendo pesos:', error);
+        return res.status(500).json({
+            estado: 0, mensaje: 'Error del servidor'
         });
     }
 };
 
-// Obtener peso por ID
+// OBTENER PESO POR ID
 export const getPesoByID = async (req, res) => {
-
     try {
-
         const { id } = req.params;
 
         const [result] = await conmysql.query(
-
-            `SELECT
-                id_captura,
-                id_deteccion,
-                id_usuario,
-                peso,
-                DATE_FORMAT(
-                    fecha_hora,
-                    '%Y-%m-%d %H:%i:%s'
-                ) AS fecha_hora,
-                estado
-            FROM capturas
-            WHERE id_captura = ?
-            AND estado = 1`,
-
+            `SELECT id_captura, id_deteccion, id_usuario, peso,
+                DATE_FORMAT(fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, estado
+             FROM capturas
+             WHERE id_captura = ? AND estado = 1`,
             [id]
-
         );
 
-        if (result.length <= 0) {
+        if (result.length === 0) {
             return res.status(404).json({
-                estado: 0,
-                mensaje: "Registro no encontrado"
+                estado: 0, mensaje: 'Registro no encontrado'
             });
         }
 
-        res.json(result[0]);
-
+        return res.json(result[0]);
     } catch (error) {
-        
-        res.status(500).json({
-
-            estado: 0,
-            mensaje: "Error del servidor"
-
+        console.error('Error obteniendo peso:', error);
+        return res.status(500).json({
+            estado: 0, mensaje: 'Error del servidor'
         });
     }
 };
 
-// Obtener el último peso recibido
+// OBTENER ULTIMO PESO REGISTRADO
 export const ultimoPeso = async (req, res) => {
     try {
         const [result] = await conmysql.query(
-
-            `SELECT
-                id_captura,
-                id_deteccion,
-                peso,
-                DATE_FORMAT(
-                    fecha_hora,
-                    '%Y-%m-%d %H:%i:%s'
-                ) AS fecha_hora
-            FROM capturas
-            WHERE estado = 1
-            ORDER BY id_captura DESC
-            LIMIT 1`
+            `SELECT id_captura, id_deteccion, peso,
+                DATE_FORMAT(fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora
+             FROM capturas
+             WHERE estado = 1
+             ORDER BY id_captura DESC LIMIT 1`
         );
 
-        if (result.length <= 0) {
+        if (result.length === 0) {
             return res.json({
-                estado: 0,
-                mensaje: "No existen registros"
+                estado: 0, mensaje: 'No existen registros'
             });
         }
 
-        res.json({
+        return res.json({
             estado: 1,
             data: result[0]
         });
-
     } catch (error) {
-        
-        res.status(500).json({
-            estado: 0,
-            mensaje: "Error"
+        console.error('Error obteniendo último peso:', error);
+        return res.status(500).json({
+            estado: 0, mensaje: 'Error del servidor'
         });
     }
 };
 
-// Desactivar registro
+// DESACTIVAR CAPTURA
 export const desactivarPeso = async (req, res) => {
     try {
-
-        const { id } = req.params;
-
         const [result] = await conmysql.query(
-            `UPDATE capturas
-             SET estado = 0
-             WHERE id_captura = ?`,
-            [id]
+            'UPDATE capturas SET estado = 0 WHERE id_captura = ?',
+            [req.params.id]
         );
 
-        if (result.affectedRows <= 0) {
+        if (result.affectedRows === 0) {
             return res.status(404).json({
-                estado: 0,
-                mensaje: "Registro no encontrado"
+                estado: 0, mensaje: 'Registro no encontrado'
             });
         }
 
-        res.json({
-            estado: 1,
-            mensaje: "Registro desactivado correctamente"
+        return res.json({
+            estado: 1, mensaje: 'Registro desactivado correctamente'
         });
-
     } catch (error) {
-        
-        res.status(500).json({
-            estado: 0,
-            mensaje: "Error del servidor"
+        console.error('Error desactivando captura:', error);
+        return res.status(500).json({
+            estado: 0, mensaje: 'Error del servidor'
         });
     }
 };
 
-// Activar registro
+// ACTIVAR CAPTURA
 export const activarPeso = async (req, res) => {
-
     try {
-        const { id } = req.params;
-
         const [result] = await conmysql.query(
-            `UPDATE capturas
-             SET estado = 1
-             WHERE id_captura = ?`,
-            [id]
-
+            'UPDATE capturas SET estado = 1 WHERE id_captura = ?',
+            [req.params.id]
         );
 
-        if (result.affectedRows <= 0) {
+        if (result.affectedRows === 0) {
             return res.status(404).json({
-                estado: 0,
-                mensaje: "Registro no encontrado"
+                estado: 0, mensaje: 'Registro no encontrado'
             });
         }
 
-        res.json({
-            estado: 1,
-            mensaje: "Registro activado correctamente"
-
+        return res.json({
+            estado: 1, mensaje: 'Registro activado correctamente'
         });
-
     } catch (error) {
-        
-        res.status(500).json({
-            estado: 0,
-            mensaje: "Error del servidor"
+        console.error('Error activando captura:', error);
+        return res.status(500).json({
+            estado: 0, mensaje: 'Error del servidor'
         });
     }
 };
 
-export const taraRealizada = (req, res) => {
-
+// SOLICITUD DE TARA DESDE ANGULAR
+export const solicitarTara = (req, res) => {
     try {
-        const io = getIO();
-        if (io) {
-            io.emit("taraRealizada", {
-                mensaje: "Balanza puesta en cero correctamente",
-                fecha_hora: new Date().toLocaleString("es-EC", {
-                    timeZone: "America/Guayaquil",
-                    hour12: false
-                })
+        verificarVencimientoTara();
+
+        if (ordenTaraPendiente) {
+            return res.status(409).json({
+                estado: 0,
+                mensaje: 'Ya existe una solicitud de tara pendiente'
             });
         }
 
-        res.json({
+        ordenTaraPendiente = {
+            id: randomUUID(),
+            creada: Date.now()
+        };
+
+        console.log('Nueva solicitud de tara:', ordenTaraPendiente.id);
+
+        return res.status(202).json({
             estado: 1,
-            mensaje: "Tara enviada"
+            mensaje: 'Solicitud recibida. Esperando confirmación del ESP32',
+            id_orden: ordenTaraPendiente.id
+        });
+    } catch (error) {
+        console.error('Error solicitando tara:', error);
+        return res.status(500).json({
+            estado: 0, mensaje: 'Error solicitando tara'
+        });
+    }
+};
+
+// ESP32 CONSULTA SI EXISTE UNA ORDEN
+export const consultarOrdenTara = (req, res) => {
+    try {
+        verificarVencimientoTara();
+        res.set('Cache-Control', 'no-store');
+
+        if (!ordenTaraPendiente) {
+            return res.type('text/plain').send('NINGUNA');
+        }
+
+        return res.type('text/plain').send(
+            `TARA:${ordenTaraPendiente.id}`
+        );
+    } catch (error) {
+        console.error('Error consultando orden:', error);
+        return res.status(500).send('ERROR');
+    }
+};
+
+// CONFIRMACION DE TARA DESDE EL ESP32
+export const taraRealizada = (req, res) => {
+    try {
+        verificarVencimientoTara();
+
+        const { id_orden, tipo, exito, mensaje } = req.body || {};
+        const io = getIO();
+
+        // TARA REALIZADA CON EL BOTON FISICO
+        if (tipo === 'fisica') {
+            if (exito !== true) {
+                return res.status(400).json({
+                    estado: 0, mensaje: 'Confirmación de tara física inválida'
+                });
+            }
+
+            const idPendiente = ordenTaraPendiente?.id || null;
+            ordenTaraPendiente = null;
+
+            io?.emit('taraRealizada', {
+                id_orden: idPendiente,
+                origen: 'fisica',
+                mensaje: 'Tara física realizada correctamente',
+                fecha_hora: fechaEcuador()
+            });
+
+            return res.json({
+                estado: 1, mensaje: 'Tara física confirmada'
+            });
+        }
+
+        // TARA REMOTA SOLICITADA DESDE VIGIA
+        if (!ordenTaraPendiente || typeof id_orden !== 'string' ||
+            id_orden !== ordenTaraPendiente.id) {
+            return res.status(409).json({
+                estado: 0, mensaje: 'No existe una orden pendiente válida'
+            });
+        }
+
+        if (typeof exito !== 'boolean') {
+            return res.status(400).json({
+                estado: 0, mensaje: 'Debe indicar el resultado de la tara'
+            });
+        }
+
+        const idConfirmado = ordenTaraPendiente.id;
+        ordenTaraPendiente = null;
+
+        if (!exito) {
+            const motivo = typeof mensaje === 'string'
+                ? mensaje.slice(0, 200) : 'El ESP32 rechazó la tara';
+
+            io?.emit('taraError', {
+                id_orden: idConfirmado,
+                mensaje: motivo,
+                fecha_hora: fechaEcuador()
+            });
+
+            return res.json({
+                estado: 0,
+                mensaje: 'El ESP32 no pudo realizar la tara'
+            });
+        }
+
+        io?.emit('taraRealizada', {
+            id_orden: idConfirmado,
+            origen: 'web',
+            mensaje: 'Balanza puesta en cero correctamente',
+            fecha_hora: fechaEcuador()
         });
 
+        console.log('Tara remota confirmada:', idConfirmado);
+
+        return res.json({
+            estado: 1,
+            mensaje: 'Tara realizada correctamente'
+        });
     } catch (error) {
-        
-        res.status(500).json({
-            estado: 0,
-            mensaje: "Error del servidor"
+        console.error('Error confirmando tara:', error);
+        return res.status(500).json({
+            estado: 0, mensaje: 'Error del servidor'
         });
     }
 };
